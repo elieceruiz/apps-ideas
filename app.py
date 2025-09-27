@@ -36,7 +36,7 @@ def guardar_idea(titulo: str, descripcion: str):
     nueva_idea = {
         "title": titulo.strip(),
         "description": descripcion.strip(),
-        "timestamp": datetime.now(colombia_tz),
+        "timestamp": datetime.now(pytz.UTC),  # siempre guardar en UTC
         "updates": []  # historial de trazabilidad
     }
     collection.insert_one(nueva_idea)
@@ -52,7 +52,7 @@ def agregar_nota(idea_id, texto: str):
 
     nueva_actualizacion = {
         "text": texto.strip(),
-        "timestamp": datetime.now(colombia_tz)
+        "timestamp": datetime.now(pytz.UTC)  # guardar en UTC
     }
     collection.update_one(
         {"_id": idea_id},
@@ -68,15 +68,17 @@ def listar_ideas():
     ideas = collection.find().sort("timestamp", -1)
 
     for idea in ideas:
-        with st.expander(f"💡 {idea['title']}  —  {idea['timestamp'].strftime('%Y-%m-%d %H:%M')}"):
+        fecha_local = idea["timestamp"].astimezone(colombia_tz)
+        with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
 
             # Historial de actualizaciones
             if "updates" in idea and len(idea["updates"]) > 0:
                 st.markdown("**Trazabilidad / Notas adicionales:**")
                 for note in idea["updates"]:
+                    fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
                     st.markdown(
-                        f"➡️ {note['text']}  \n ⏰ {note['timestamp'].strftime('%Y-%m-%d %H:%M')}"
+                        f"➡️ {note['text']}  \n ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}"
                     )
                 st.divider()
 

@@ -9,9 +9,6 @@ from datetime import datetime
 # ==============================
 st.set_page_config(page_title="💡 Apps Ideas", page_icon="💡", layout="centered")
 
-# === FLAG DEBUG ===
-DEBUG = True  # ponelo en False cuando quieras limpio
-
 # Leer configuración MongoDB de Secrets
 mongodb_uri = st.secrets["mongodb"]["uri"]
 mongodb_db = st.secrets["mongodb"]["db"]
@@ -44,11 +41,6 @@ def guardar_idea(titulo: str, descripcion: str):
     }
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
-
-    if DEBUG:
-        st.write("🔍 Idea insertada:")
-        st.json(nueva_idea)
-
     return True
 
 
@@ -67,11 +59,6 @@ def agregar_nota(idea_id, texto: str):
         {"$push": {"updates": nueva_actualizacion}}
     )
     st.success("📝 Nota agregada a la idea")
-
-    if DEBUG:
-        st.write(f"🔍 Nota agregada en idea {idea_id}:")
-        st.json(nueva_actualizacion)
-
     return True
 
 
@@ -115,39 +102,3 @@ with st.form("form_agregar_idea", clear_on_submit=True):
         st.rerun()
 
 listar_ideas()
-
-# ==============================
-# DEBUG EXTRA
-# ==============================
-if DEBUG:
-    st.subheader("🔍 Estado completo de la sesión")
-    st.json(dict(st.session_state))
-
-    # === Traducción humana del estado ===
-    def debug_humano(session_state: dict):
-        salida = []
-        for k, v in session_state.items():
-            if k.startswith("FormSubmitter:form_agregar_idea"):
-                estado = "presionado ✅" if v else "no presionado ❌"
-                salida.append(f"📌 Botón 'Guardar idea': {estado}")
-
-            elif k.startswith("FormSubmitter:form_update_"):
-                idea_id = k.split("_")[2].split("-")[0]
-                estado = "presionado ✅" if v else "no presionado ❌"
-                salida.append(f"📝 Botón 'Guardar nota' (idea {idea_id}): {estado}")
-
-            elif k.startswith("nota_"):
-                idea_id = k.split("_")[1]
-                if str(v).strip() == "":
-                    salida.append(f"🗒️ Nota en idea {idea_id}: (vacía)")
-                else:
-                    salida.append(f"🗒️ Nota en idea {idea_id}: {v}")
-
-            else:
-                salida.append(f"⚙️ {k}: {v}")
-
-        return salida
-
-    st.subheader("🪄 Estado en lenguaje humano")
-    for linea in debug_humano(dict(st.session_state)):
-        st.write(linea)

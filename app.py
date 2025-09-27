@@ -25,7 +25,69 @@ colombia_tz = pytz.timezone("America/Bogota")
 st.title("💡 Apps Ideas")
 
 # ==============================
-# FORMULARIO NUEVA IDEA
+# FUNCIONES
+# ==============================
+def guardar_idea(titulo: str, descripcion: str):
+    """Guarda una nueva idea en la colección."""
+    if titulo.strip() == "" or descripcion.strip() == "":
+        st.error("Complete todos los campos por favor")
+        return
+
+    nueva_idea = {
+        "title": titulo.strip(),
+        "description": descripcion.strip(),
+        "timestamp": datetime.now(colombia_tz),
+        "updates": []  # historial de trazabilidad
+    }
+    collection.insert_one(nueva_idea)
+    st.success("✅ Idea guardada correctamente")
+    st.rerun()
+
+
+def agregar_nota(idea_id, texto: str):
+    """Agrega una nota de trazabilidad a una idea existente."""
+    if texto.strip() == "":
+        st.error("La nota no puede estar vacía")
+        return
+
+    nueva_actualizacion = {
+        "text": texto.strip(),
+        "timestamp": datetime.now(colombia_tz)
+    }
+    collection.update_one(
+        {"_id": idea_id},
+        {"$push": {"updates": nueva_actualizacion}}
+    )
+    st.success("📝 Nota agregada a la idea")
+    st.rerun()
+
+
+def listar_ideas():
+    """Muestra las ideas guardadas con su trazabilidad y formulario de notas."""
+    st.subheader("📌 Guardadas")
+    ideas = collection.find().sort("timestamp", -1)
+
+    for idea in ideas:
+        with st.expander(f"💡 {idea['title']}  —  {idea['timestamp'].strftime('%Y-%m-%d %H:%M')}"):
+            st.write(idea["description"])
+
+            # Historial de actualizaciones
+            if "updates" in idea and len(idea["updates"]) > 0:
+                st.markdown("**Trazabilidad / Notas adicionales:**")
+                for note in idea["updates"]:
+                    st.markdown(f"➡️ {note['text']}  \n ⏰ {note['timestamp'].strftime('%Y-%m-%d %H:%M')}")
+                st.divider()
+
+            # Formulario para agregar nueva nota
+            with st.form(f"form_update_{idea['_id']}"):
+                nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
+                enviar_nota = st.form_submit_button("Guardar nota")
+
+                if enviar_nota:
+                    agregar_nota(idea["_id"], nueva_nota)
+
+# ==============================
+# UI PRINCIPAL
 # ==============================
 with st.form("form_agregar_idea"):
     titulo_idea = st.text_input("Título de la idea")
@@ -33,52 +95,6 @@ with st.form("form_agregar_idea"):
     envio = st.form_submit_button("Guardar idea")
 
     if envio:
-        if titulo_idea.strip() == "" or descripcion_idea.strip() == "":
-            st.error("Complete todos los campos por favor")
-        else:
-            nueva_idea = {
-                "title": titulo_idea.strip(),
-                "description": descripcion_idea.strip(),
-                "timestamp": datetime.now(colombia_tz),
-                "updates": []  # historial de trazabilidad
-            }
-            collection.insert_one(nueva_idea)
-            st.success("✅ Idea guardada correctamente")
+        guardar_idea(titulo_idea, descripcion_idea)
 
-# ==============================
-# LISTAR IDEAS
-# ==============================
-st.subheader("📌 Guardadas")
-
-ideas = collection.find().sort("timestamp", -1)
-
-for idea in ideas:
-    with st.expander(f"💡 {idea['title']}  —  {idea['timestamp'].strftime('%Y-%m-%d %H:%M')}"):
-        st.write(idea["description"])
-
-        # Mostrar historial de actualizaciones si existen
-        if "updates" in idea and len(idea["updates"]) > 0:
-            st.markdown("**Trazabilidad / Notas adicionales:**")
-            for note in idea["updates"]:
-                st.markdown(f"➡️ {note['text']}  \n ⏰ {note['timestamp'].strftime('%Y-%m-%d %H:%M')}")
-            st.divider()
-
-        # Formulario para agregar nueva nota a la idea
-        with st.form(f"form_update_{idea['_id']}"):
-            nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
-            enviar_nota = st.form_submit_button("Guardar nota")
-
-            if enviar_nota:
-                if nueva_nota.strip() == "":
-                    st.error("La nota no puede estar vacía")
-                else:
-                    nueva_actualizacion = {
-                        "text": nueva_nota.strip(),
-                        "timestamp": datetime.now(colombia_tz)
-                    }
-                    collection.update_one(
-                        {"_id": idea["_id"]},
-                        {"$push": {"updates": nueva_actualizacion}}
-                    )
-                    st.success("📝 Nota agregada a la idea")
-                    st.rerun()
+listar_ideas()

@@ -122,3 +122,32 @@ listar_ideas()
 if DEBUG:
     st.subheader("🔍 Estado completo de la sesión")
     st.json(dict(st.session_state))
+
+    # === Traducción humana del estado ===
+    def debug_humano(session_state: dict):
+        salida = []
+        for k, v in session_state.items():
+            if k.startswith("FormSubmitter:form_agregar_idea"):
+                estado = "presionado ✅" if v else "no presionado ❌"
+                salida.append(f"📌 Botón 'Guardar idea': {estado}")
+
+            elif k.startswith("FormSubmitter:form_update_"):
+                idea_id = k.split("_")[2].split("-")[0]
+                estado = "presionado ✅" if v else "no presionado ❌"
+                salida.append(f"📝 Botón 'Guardar nota' (idea {idea_id}): {estado}")
+
+            elif k.startswith("nota_"):
+                idea_id = k.split("_")[1]
+                if str(v).strip() == "":
+                    salida.append(f"🗒️ Nota en idea {idea_id}: (vacía)")
+                else:
+                    salida.append(f"🗒️ Nota en idea {idea_id}: {v}")
+
+            else:
+                salida.append(f"⚙️ {k}: {v}")
+
+        return salida
+
+    st.subheader("🪄 Estado en lenguaje humano")
+    for linea in debug_humano(dict(st.session_state)):
+        st.write(linea)

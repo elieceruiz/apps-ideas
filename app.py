@@ -42,9 +42,10 @@ def guardar_idea(titulo: str, descripcion: str):
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
 
-    # Limpiar los campos del formulario
-    st.session_state["titulo_idea"] = ""
-    st.session_state["descripcion_idea"] = ""
+    # Resetear de forma segura los campos del formulario
+    for key in ["titulo_idea", "descripcion_idea"]:
+        if key in st.session_state:
+            st.session_state.update({key: ""})
 
     st.rerun()
 
@@ -65,8 +66,9 @@ def agregar_nota(idea_id, texto: str, key: str):
     )
     st.success("📝 Nota agregada a la idea")
 
-    # Limpiar el campo de nota de esta idea
-    st.session_state[key] = ""
+    # Limpiar el campo de nota de esta idea de forma segura
+    if key in st.session_state:
+        st.session_state.update({key: ""})
 
     st.rerun()
 

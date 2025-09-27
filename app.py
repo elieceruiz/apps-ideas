@@ -7,7 +7,7 @@ from datetime import datetime
 # ==============================
 # CONFIG
 # ==============================
-st.set_page_config(page_title="💡 Registro de Ideas", page_icon="💡", layout="centered")
+st.set_page_config(page_title="💡 Apps Ideas", page_icon="💡", layout="centered")
 
 # Leer configuración MongoDB de Secrets
 mongodb_uri = st.secrets["mongodb"]["uri"]
@@ -22,7 +22,7 @@ collection = db[mongodb_collection]
 # Zona horaria Colombia
 colombia_tz = pytz.timezone("America/Bogota")
 
-st.title("💡 Registro de Ideas de Aplicaciones")
+st.title("💡 Apps Ideas")
 
 # ==============================
 # FORMULARIO NUEVA IDEA
@@ -48,7 +48,7 @@ with st.form("form_agregar_idea"):
 # ==============================
 # LISTAR IDEAS
 # ==============================
-st.subheader("📌 Ideas guardadas")
+st.subheader("📌 Guardadas")
 
 ideas = collection.find().sort("timestamp", -1)
 

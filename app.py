@@ -42,11 +42,6 @@ def guardar_idea(titulo: str, descripcion: str):
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
 
-    # Resetear de forma segura los campos del formulario
-    for key in ["titulo_idea", "descripcion_idea"]:
-        if key in st.session_state:
-            st.session_state.update({key: ""})
-
     st.rerun()
 
 
@@ -65,10 +60,6 @@ def agregar_nota(idea_id, texto: str, key: str):
         {"$push": {"updates": nueva_actualizacion}}
     )
     st.success("📝 Nota agregada a la idea")
-
-    # Limpiar el campo de nota de esta idea de forma segura
-    if key in st.session_state:
-        st.session_state.update({key: ""})
 
     st.rerun()
 
@@ -92,7 +83,7 @@ def listar_ideas():
             # Formulario para agregar nueva nota
             nota_key = f"nota_{idea['_id']}"
             with st.form(f"form_update_{idea['_id']}"):
-                nueva_nota = st.text_area("Agregar nota", key=nota_key)
+                nueva_nota = st.text_area("Agregar nota", key=nota_key, value="")
                 enviar_nota = st.form_submit_button("Guardar nota")
 
                 if enviar_nota:
@@ -102,8 +93,8 @@ def listar_ideas():
 # UI PRINCIPAL
 # ==============================
 with st.form("form_agregar_idea"):
-    titulo_idea = st.text_input("Título de la idea", key="titulo_idea")
-    descripcion_idea = st.text_area("Descripción de la idea", key="descripcion_idea")
+    titulo_idea = st.text_input("Título de la idea", key="titulo_idea", value="")
+    descripcion_idea = st.text_area("Descripción de la idea", key="descripcion_idea", value="")
     envio = st.form_submit_button("Guardar idea")
 
     if envio:

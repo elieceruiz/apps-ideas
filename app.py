@@ -27,11 +27,11 @@ st.title("💡 Apps Ideas")
 # ==============================
 # FUNCIONES
 # ==============================
-def guardar_idea(titulo: str, descripcion: str):
+def guardar_idea(titulo: str, descripcion: str) -> bool:
     """Guarda una nueva idea en la colección."""
     if titulo.strip() == "" or descripcion.strip() == "":
         st.error("Complete todos los campos por favor")
-        return
+        return False  # Falló la validación
 
     nueva_idea = {
         "title": titulo.strip(),
@@ -41,8 +41,7 @@ def guardar_idea(titulo: str, descripcion: str):
     }
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
-
-    st.rerun()
+    return True  # Se guardó bien
 
 
 def agregar_nota(idea_id, texto: str, key: str):
@@ -98,6 +97,11 @@ with st.form("form_agregar_idea"):
     envio = st.form_submit_button("Guardar idea")
 
     if envio:
-        guardar_idea(titulo_idea, descripcion_idea)
+        exito = guardar_idea(titulo_idea, descripcion_idea)
+        if exito:
+            # limpiar después de guardar
+            st.session_state.titulo_idea = ""
+            st.session_state.descripcion_idea = ""
+            st.rerun()
 
 listar_ideas()

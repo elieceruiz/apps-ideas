@@ -81,4 +81,4 @@ for idea in ideas:
                         {"$push": {"updates": nueva_actualizacion}}
                     )
                     st.success("📝 Nota agregada a la idea")
-                    st.experimental_rerun()
+                    st.rerun()

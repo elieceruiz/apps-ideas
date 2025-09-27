@@ -27,11 +27,11 @@ st.title("💡 Apps Ideas")
 # ==============================
 # FUNCIONES
 # ==============================
-def guardar_idea(titulo: str, descripcion: str) -> bool:
+def guardar_idea(titulo: str, descripcion: str):
     """Guarda una nueva idea en la colección."""
     if titulo.strip() == "" or descripcion.strip() == "":
         st.error("Complete todos los campos por favor")
-        return False  # Falló la validación
+        return False
 
     nueva_idea = {
         "title": titulo.strip(),
@@ -41,14 +41,14 @@ def guardar_idea(titulo: str, descripcion: str) -> bool:
     }
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
-    return True  # Se guardó bien
+    return True
 
 
-def agregar_nota(idea_id, texto: str, key: str):
+def agregar_nota(idea_id, texto: str):
     """Agrega una nota de trazabilidad a una idea existente."""
     if texto.strip() == "":
         st.error("La nota no puede estar vacía")
-        return
+        return False
 
     nueva_actualizacion = {
         "text": texto.strip(),
@@ -59,8 +59,7 @@ def agregar_nota(idea_id, texto: str, key: str):
         {"$push": {"updates": nueva_actualizacion}}
     )
     st.success("📝 Nota agregada a la idea")
-
-    st.rerun()
+    return True
 
 
 def listar_ideas():
@@ -86,7 +85,14 @@ def listar_ideas():
                 enviar_nota = st.form_submit_button("Guardar nota")
 
                 if enviar_nota:
-                    agregar_nota(idea["_id"], nueva_nota, nota_key)
+                    exito = agregar_nota(idea["_id"], nueva_nota)
+                    if exito:
+                        try:
+                            st.session_state[nota_key] = ""
+                            st.rerun()
+                        except Exception as e:
+                            st.warning(f"⚠️ No se pudo limpiar la nota: {e}")
+                            st.write("🔍 Estado actual:", dict(st.session_state))
 
 # ==============================
 # UI PRINCIPAL
@@ -99,9 +105,12 @@ with st.form("form_agregar_idea"):
     if envio:
         exito = guardar_idea(titulo_idea, descripcion_idea)
         if exito:
-            # limpiar después de guardar
-            st.session_state.titulo_idea = ""
-            st.session_state.descripcion_idea = ""
-            st.rerun()
+            try:
+                st.session_state["titulo_idea"] = ""
+                st.session_state["descripcion_idea"] = ""
+                st.rerun()
+            except Exception as e:
+                st.warning(f"⚠️ No se pudieron limpiar los campos: {e}")
+                st.write("🔍 Estado actual:", dict(st.session_state))
 
 listar_ideas()

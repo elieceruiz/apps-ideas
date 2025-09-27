@@ -25,32 +25,16 @@ colombia_tz = pytz.timezone("America/Bogota")
 st.title("💡 Apps Ideas")
 
 # ==============================
+# INICIALIZACIÓN DE SESSION_STATE
+# ==============================
+if "titulo_idea" not in st.session_state:
+    st.session_state.titulo_idea = ""
+if "descripcion_idea" not in st.session_state:
+    st.session_state.descripcion_idea = ""
+
+# ==============================
 # FUNCIONES
 # ==============================
-def traducir_session_state(state: dict):
-    """Convierte el session_state en frases legibles."""
-    traducciones = []
-    for k, v in state.items():
-        if k.startswith("FormSubmitter:form_agregar_idea"):
-            traducciones.append(f"📝 Botón 'Guardar idea': {'presionado' if v else 'no presionado'}")
-        elif k.startswith("FormSubmitter:form_update_"):
-            idea_id = k.split("_")[-1].split("-")[0]
-            traducciones.append(f"📝 Botón 'Guardar nota' (idea {idea_id}): {'presionado' if v else 'no presionado'}")
-        elif k.startswith("nota_"):
-            idea_id = k.replace("nota_", "")
-            if v.strip() == "":
-                traducciones.append(f"🗒️ Campo de nota (idea {idea_id}): vacío")
-            else:
-                traducciones.append(f"🗒️ Campo de nota (idea {idea_id}): con texto → '{v}'")
-        elif k == "titulo_idea":
-            traducciones.append(f"💡 Campo título: '{v}'" if v else "💡 Campo título vacío")
-        elif k == "descripcion_idea":
-            traducciones.append(f"📄 Campo descripción: '{v}'" if v else "📄 Campo descripción vacío")
-        else:
-            traducciones.append(f"🔧 {k}: {v}")
-    return traducciones
-
-
 def guardar_idea(titulo: str, descripcion: str):
     """Guarda una nueva idea en la colección."""
     if titulo.strip() == "" or descripcion.strip() == "":
@@ -117,30 +101,43 @@ def listar_ideas():
                         except Exception as e:
                             st.warning(f"⚠️ No se pudo limpiar la nota: {e}")
                             st.write("🔍 Estado actual:", dict(st.session_state))
-                            st.markdown("### 🗣️ Traducción del estado")
-                            for linea in traducir_session_state(st.session_state):
-                                st.write(linea)
 
 # ==============================
 # UI PRINCIPAL
 # ==============================
 with st.form("form_agregar_idea"):
-    titulo_idea = st.text_input("Título de la idea", key="titulo_idea", value="")
-    descripcion_idea = st.text_area("Descripción de la idea", key="descripcion_idea", value="")
+    titulo_idea = st.text_input("Título de la idea", key="titulo_idea")
+    descripcion_idea = st.text_area("Descripción de la idea", key="descripcion_idea")
     envio = st.form_submit_button("Guardar idea")
 
     if envio:
         exito = guardar_idea(titulo_idea, descripcion_idea)
         if exito:
-            try:
-                st.session_state["titulo_idea"] = ""
-                st.session_state["descripcion_idea"] = ""
-                st.rerun()
-            except Exception as e:
-                st.warning(f"⚠️ No se pudieron limpiar los campos: {e}")
-                st.write("🔍 Estado actual:", dict(st.session_state))
-                st.markdown("### 🗣️ Traducción del estado")
-                for linea in traducir_session_state(st.session_state):
-                    st.write(linea)
+            # ✅ Ahora sí se pueden limpiar los campos sin error
+            st.session_state.titulo_idea = ""
+            st.session_state.descripcion_idea = ""
+            st.rerun()
 
 listar_ideas()
+
+# ==============================
+# DEBUG (estado traducido)
+# ==============================
+if st.checkbox("🔍 Ver debug de sesión"):
+    st.write("🔍 Estado completo de la sesión")
+    st.json(dict(st.session_state))
+
+    st.markdown("🗣️ **Traducción del estado**")
+    for k, v in st.session_state.items():
+        if k.startswith("FormSubmitter:form_update"):
+            idea_id = k.split("_")[-1].split("-")[0]
+            st.write(f"📝 Botón 'Guardar nota' (idea {idea_id}): {'presionado' if v else 'no presionado'}")
+        elif k.startswith("nota_"):
+            idea_id = k.replace("nota_", "")
+            st.write(f"🗒️ Campo de nota (idea {idea_id}): {'vacío' if v == '' else v}")
+        elif k == "titulo_idea":
+            st.write(f"💡 Campo título: '{v}'" if v else "💡 Campo título vacío")
+        elif k == "descripcion_idea":
+            st.write(f"📄 Campo descripción: '{v}'" if v else "📄 Campo descripción vacío")
+        elif k.startswith("FormSubmitter:form_agregar_idea"):
+            st.write(f"📝 Botón 'Guardar idea': {'presionado' if v else 'no presionado'}")

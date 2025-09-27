@@ -9,6 +9,9 @@ from datetime import datetime
 # ==============================
 st.set_page_config(page_title="💡 Apps Ideas", page_icon="💡", layout="centered")
 
+# === FLAG DEBUG ===
+DEBUG = True  # ponelo en False cuando quieras limpio
+
 # Leer configuración MongoDB de Secrets
 mongodb_uri = st.secrets["mongodb"]["uri"]
 mongodb_db = st.secrets["mongodb"]["db"]
@@ -41,6 +44,11 @@ def guardar_idea(titulo: str, descripcion: str):
     }
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
+
+    if DEBUG:
+        st.write("🔍 Idea insertada:")
+        st.json(nueva_idea)
+
     return True
 
 
@@ -59,6 +67,11 @@ def agregar_nota(idea_id, texto: str):
         {"$push": {"updates": nueva_actualizacion}}
     )
     st.success("📝 Nota agregada a la idea")
+
+    if DEBUG:
+        st.write(f"🔍 Nota agregada en idea {idea_id}:")
+        st.json(nueva_actualizacion)
+
     return True
 
 
@@ -75,42 +88,37 @@ def listar_ideas():
             if "updates" in idea and len(idea["updates"]) > 0:
                 st.markdown("**Trazabilidad / Notas adicionales:**")
                 for note in idea["updates"]:
-                    st.markdown(f"➡️ {note['text']}  \n ⏰ {note['timestamp'].strftime('%Y-%m-%d %H:%M')}")
+                    st.markdown(
+                        f"➡️ {note['text']}  \n ⏰ {note['timestamp'].strftime('%Y-%m-%d %H:%M')}"
+                    )
                 st.divider()
 
             # Formulario para agregar nueva nota
-            nota_key = f"nota_{idea['_id']}"
-            with st.form(f"form_update_{idea['_id']}"):
-                nueva_nota = st.text_area("Agregar nota", key=nota_key, value="")
+            with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):
+                nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
                 enviar_nota = st.form_submit_button("Guardar nota")
 
                 if enviar_nota:
-                    exito = agregar_nota(idea["_id"], nueva_nota)
-                    if exito:
-                        try:
-                            st.session_state[nota_key] = ""
-                            st.rerun()
-                        except Exception as e:
-                            st.warning(f"⚠️ No se pudo limpiar la nota: {e}")
-                            st.write("🔍 Estado actual:", dict(st.session_state))
+                    agregar_nota(idea["_id"], nueva_nota)
+                    st.rerun()
 
 # ==============================
 # UI PRINCIPAL
 # ==============================
-with st.form("form_agregar_idea"):
-    titulo_idea = st.text_input("Título de la idea", key="titulo_idea", value="")
-    descripcion_idea = st.text_area("Descripción de la idea", key="descripcion_idea", value="")
+with st.form("form_agregar_idea", clear_on_submit=True):
+    titulo_idea = st.text_input("Título de la idea")
+    descripcion_idea = st.text_area("Descripción de la idea")
     envio = st.form_submit_button("Guardar idea")
 
     if envio:
-        exito = guardar_idea(titulo_idea, descripcion_idea)
-        if exito:
-            try:
-                st.session_state["titulo_idea"] = ""
-                st.session_state["descripcion_idea"] = ""
-                st.rerun()
-            except Exception as e:
-                st.warning(f"⚠️ No se pudieron limpiar los campos: {e}")
-                st.write("🔍 Estado actual:", dict(st.session_state))
+        guardar_idea(titulo_idea, descripcion_idea)
+        st.rerun()
 
 listar_ideas()
+
+# ==============================
+# DEBUG EXTRA
+# ==============================
+if DEBUG:
+    st.subheader("🔍 Estado completo de la sesión")
+    st.json(dict(st.session_state))

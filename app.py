@@ -108,8 +108,8 @@ tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
 )
 
 with tab_guardadas:
-    ideas = list(collection.find().sort("timestamp", -1))  # Obtener ideas primero
-    st.subheader(f"📌 {len(ideas)} guardadas")              # Mostrar contador antes
+    ideas = list(collection.find().sort("timestamp", -1))
+    st.subheader(f"📌 {len(ideas)} guardadas")
     for idea in ideas:
         fecha_local = idea["timestamp"].astimezone(colombia_tz)
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
@@ -149,11 +149,11 @@ with tab_guardadas:
                             f"{done_local.strftime('%Y-%m-%d %H:%M') if done_local else ''}  \n "
                             f"{duracion}"
                         )
-                st.divider()
+                    st.divider()
             with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):
                 nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
                 enviar_nota = st.form_submit_button("Guardar nota")
-                if enviar_nota:
+                if envio:
                     agregar_nota(idea["_id"], nueva_nota)
                     st.rerun()
 
@@ -167,27 +167,52 @@ with tab_ideas:
             st.rerun()
 
 with tab_desarrollo:
-    # Traer y mostrar data de dev_collection en tabla ordenada descendente con índice comenzando en 1
+    evento = dev_collection.find_one({"tipo": "dev_app", "en_curso": True})
+
+    if evento:
+        hora_inicio = to_datetime_local(evento["inicio"])
+        segundos_transcurridos = int((datetime.now(colombia_tz) - hora_inicio).total_seconds())
+        st.success(f"🟢 Desarrollo en curso desde las {hora_inicio.strftime('%H:%M:%S')}")
+        cronometro = st.empty()
+        stop_button = st.button("⏹️ Finalizar desarrollo", key="stop_dev")
+
+        for i in range(segundos_transcurridos, segundos_transcurridos + 100000):
+            if stop_button:
+                dev_collection.update_one(
+                    {"_id": evento["_id"]},
+                    {"$set": {"fin": datetime.now(colombia_tz), "en_curso": False}}
+                )
+                st.success("✅ Registro finalizado.")
+                st.rerun()
+            duracion = str(timedelta(seconds=i))
+            cronometro.markdown(f"### ⏱️ Duración: {duracion}")
+            time.sleep(1)
+    else:
+        st.info("No hay desarrollo en curso.")
+        if st.button("🟢 Iniciar desarrollo", key="start_dev"):
+            dev_collection.insert_one({
+                "tipo": "dev_app",
+                "inicio": datetime.now(colombia_tz),
+                "en_curso": True
+            })
+            st.rerun()
+
     eventos_cursor = dev_collection.find().sort("inicio", -1)
     eventos = list(eventos_cursor)
-
     if len(eventos) == 0:
         st.info("No hay datos para mostrar.")
     else:
-        # Preparar dataframe
         data = []
         for i, ev in enumerate(eventos, start=1):
             inicio_local = ev["inicio"].astimezone(colombia_tz) if "inicio" in ev else None
             fin_local = ev.get("fin", None)
             if fin_local is not None:
                 fin_local = fin_local.astimezone(colombia_tz)
-
             data.append({
                 "#": i,
                 "Inicio": inicio_local.strftime("%Y-%m-%d %H:%M:%S") if inicio_local else "",
                 "Fin": fin_local.strftime("%Y-%m-%d %H:%M:%S") if fin_local else "",
                 "En curso": "Sí" if ev.get("en_curso", False) else "No"
             })
-
         df = pd.DataFrame(data)
         st.dataframe(df, use_container_width=True)

@@ -12,13 +12,13 @@ import pandas as pd
 # ==============================
 st.set_page_config(page_title="💡 Apps Ideas", page_icon="💡", layout="centered")
 
-# Leer configuración MongoDB de Secrets
+# Configuración MongoDB Secrets
 mongodb_uri = st.secrets["mongodb"]["uri"]
 mongodb_db = st.secrets["mongodb"]["db"]
 mongodb_collection = st.secrets["mongodb"]["collection"]
 mongodb_collection_desarrollo = st.secrets["mongodb"]["collection_desarrollo"]
 
-# Conexión a MongoDB
+# Conexión MongoDB
 client = MongoClient(mongodb_uri)
 db = client[mongodb_db]
 collection = db[mongodb_collection]
@@ -29,9 +29,7 @@ colombia_tz = pytz.timezone("America/Bogota")
 
 st.title("💡 Apps Ideas")
 
-# ==============================
-# FUNCIONES IDEAS
-# ==============================
+# Guardar idea
 def guardar_idea(titulo: str, descripcion: str):
     if titulo.strip() == "" or descripcion.strip() == "":
         st.error("Complete todos los campos por favor")
@@ -46,6 +44,7 @@ def guardar_idea(titulo: str, descripcion: str):
     st.success("✅ Idea guardada correctamente")
     return True
 
+# Agregar nota a idea
 def agregar_nota(idea_id, texto: str):
     if texto.strip() == "":
         st.error("La nota no puede estar vacía")
@@ -63,46 +62,11 @@ def agregar_nota(idea_id, texto: str):
     st.success("📝 Nota agregada a la idea")
     return True
 
-# ==============================
-# FUNCIONES DESARROLLO
-# ==============================
 def to_datetime_local(dt):
     if not isinstance(dt, datetime):
         dt = parse(str(dt))
     return dt.astimezone(colombia_tz)
 
-def cronometro_desarrollo():
-    st.subheader("⏳ Tiempo invertido en el desarrollo de la App")
-    evento = dev_collection.find_one({"tipo": "dev_app", "en_curso": True})
-    if evento:
-        hora_inicio = to_datetime_local(evento["inicio"])
-        segundos_transcurridos = int((datetime.now(colombia_tz) - hora_inicio).total_seconds())
-        st.success(f"🟢 Desarrollo en curso desde las {hora_inicio.strftime('%H:%M:%S')}")
-        cronometro = st.empty()
-        stop_button = st.button("⏹️ Finalizar desarrollo", key="stop_dev")
-        for i in range(segundos_transcurridos, segundos_transcurridos + 100000):
-            if stop_button:
-                dev_collection.update_one(
-                    {"_id": evento["_id"]},
-                    {"$set": {"fin": datetime.now(colombia_tz), "en_curso": False}}
-                )
-                st.success("✅ Registro finalizado.")
-                st.rerun()
-            duracion = str(timedelta(seconds=i))
-            cronometro.markdown(f"### ⏱️ Duración: {duracion}")
-            time.sleep(1)
-    else:
-        if st.button("🟢 Iniciar desarrollo", key="start_dev"):
-            dev_collection.insert_one({
-                "tipo": "dev_app",
-                "inicio": datetime.now(colombia_tz),
-                "en_curso": True
-            })
-            st.rerun()
-
-# ==============================
-# UI PRINCIPAL
-# ==============================
 tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
     ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"]
 )
@@ -184,8 +148,9 @@ with tab_desarrollo:
                 )
                 st.success("✅ Registro finalizado.")
                 st.rerun()
-            duracion = str(timedelta(seconds=i))
-            cronometro.markdown(f"### ⏱️ Duración: {duracion}")
+
+            duracion_texto = str(timedelta(seconds=i))
+            cronometro.markdown(f"### ⏱️ Duración: {duracion_texto}")
             time.sleep(1)
     else:
         st.info("No hay desarrollo en curso.")
@@ -199,19 +164,24 @@ with tab_desarrollo:
 
     eventos_cursor = dev_collection.find().sort("inicio", -1)
     eventos = list(eventos_cursor)
+
     if len(eventos) == 0:
         st.info("No hay datos para mostrar.")
     else:
+        ahora = datetime.now(colombia_tz)
         data = []
-        for i, ev in enumerate(eventos, start=1):
+        for ev in eventos:
             inicio_local = ev["inicio"].astimezone(colombia_tz) if "inicio" in ev else None
             fin_local = ev.get("fin", None)
             if fin_local is not None:
                 fin_local = fin_local.astimezone(colombia_tz)
+            tiempo_final = fin_local if fin_local else ahora
+            duracion_timedelta = tiempo_final - inicio_local if inicio_local else timedelta(0)
+            duracion_str = str(duracion_timedelta).split('.')[0]  # Sin microsegundos
             data.append({
-                "#": i,
                 "Inicio": inicio_local.strftime("%Y-%m-%d %H:%M:%S") if inicio_local else "",
                 "Fin": fin_local.strftime("%Y-%m-%d %H:%M:%S") if fin_local else "",
+                "Duración": duracion_str,
                 "En curso": "Sí" if ev.get("en_curso", False) else "No"
             })
         df = pd.DataFrame(data)

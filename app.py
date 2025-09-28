@@ -5,6 +5,7 @@ import time
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 from dateutil.parser import parse
+import pandas as pd
 
 # ==============================
 # CONFIG
@@ -107,10 +108,10 @@ def cronometro_desarrollo():
             st.rerun()
 
 # ==============================
-# UI PRINCIPAL con contador antes de expanders en Guardadas y checkbox corregido
+# UI PRINCIPAL
 # ==============================
-tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
-    ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"]
+tab_guardadas, tab_ideas, tab_desarrollo, tab_historial = st.tabs(
+    ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo", "📊 Historial Desarrollo"]
 )
 
 with tab_guardadas:
@@ -182,3 +183,42 @@ with tab_ideas:
 
 with tab_desarrollo:
     cronometro_desarrollo()
+
+with tab_historial:
+    st.subheader("📊 Historial de sesiones de desarrollo")
+
+    sesiones = list(dev_collection.find({"tipo": "dev_app"}).sort("inicio", -1))
+
+    if not sesiones:
+        st.info("No hay registros de desarrollo aún.")
+    else:
+        filas = []
+        total = len(sesiones)
+        for idx, sesion in enumerate(sesiones, start=1):
+            numero = total - idx + 1  # Numeración descendente
+
+            inicio_local = to_datetime_local(sesion["inicio"])
+            fin_local = to_datetime_local(sesion["fin"]) if sesion.get("fin") else None
+
+            if fin_local:
+                duracion = fin_local - inicio_local
+                estado = "Finalizado"
+            else:
+                duracion = datetime.now(colombia_tz) - inicio_local
+                estado = "En curso"
+
+            horas, resto = divmod(int(duracion.total_seconds()), 3600)
+            minutos, segundos = divmod(resto, 60)
+            duracion_str = f"{horas:02d}:{minutos:02d}:{segundos:02d}"
+
+            filas.append({
+                "#": numero,
+                "Inicio": inicio_local.strftime("%Y-%m-%d %H:%M"),
+                "Fin": fin_local.strftime("%Y-%m-%d %H:%M") if fin_local else "—",
+                "Duración": duracion_str,
+                "Estado": estado
+            })
+
+        df = pd.DataFrame(filas)
+        df = df.sort_values("#", ascending=False).reset_index(drop=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)

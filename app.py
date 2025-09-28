@@ -177,8 +177,8 @@ tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
 )
 
 with tab_guardadas:
-    contador = listar_ideas()
-    st.subheader(f"📌 {contador} guardadas")
+    ideas_count = listar_ideas()
+    st.subheader(f"📌 {ideas_count} guardadas")
 
 with tab_ideas:
     with st.form("form_agregar_idea", clear_on_submit=True):

@@ -1,10 +1,11 @@
-# app.py (ajustado)
+# app.py
 import streamlit as st
 import pytz
 from pymongo import MongoClient
 from datetime import datetime
 from bson import ObjectId
 from twilio.rest import Client
+from streamlit_autorefresh import st_autorefresh
 
 # ==============================
 # CONFIG
@@ -30,21 +31,17 @@ twilio_client = Client(twilio_sid, twilio_token)
 # Zona horaria
 colombia_tz = pytz.timezone("America/Bogota")
 
+st.title("💡 Apps Ideas")
 
 # ==============================
 # FUNCIONES
 # ==============================
 def parse_datetime(value):
-    """Normaliza cualquier datetime/string -> datetime con tzinfo UTC."""
-    if not value:
-        return None
+    """Convierte value a datetime si viene como string ISO."""
     if isinstance(value, datetime):
-        if value.tzinfo is None:  # naive -> forzamos Bogotá
-            return colombia_tz.localize(value)
         return value
     try:
-        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        return dt if dt.tzinfo else colombia_tz.localize(dt)
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except Exception:
         return None
 
@@ -59,7 +56,7 @@ def guardar_idea(titulo: str, descripcion: str):
         "description": descripcion.strip(),
         "timestamp": datetime.now(pytz.UTC),
         "updates": [],
-        "sessions": []
+        "sessions": []  # sesiones de trabajo
     }
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
@@ -94,19 +91,68 @@ def agregar_nota(idea_id, texto: str):
     return True
 
 
+# ==============================
+# SESIONES DE TRABAJO
+# ==============================
+def iniciar_sesion(idea_id):
+    idea = collection.find_one({"_id": ObjectId(idea_id)})
+    sesiones = idea.get("sessions", [])
+
+    # revisar si ya hay una activa
+    for sesion in sesiones:
+        if sesion.get("fin") is None:
+            st.warning("⚠️ Ya hay una sesión activa en esta idea")
+            return
+
+    nueva_sesion = {"inicio": datetime.now(pytz.UTC), "fin": None}
+    collection.update_one(
+        {"_id": ObjectId(idea_id)},
+        {"$push": {"sessions": nueva_sesion}}
+    )
+    st.success("▶️ Sesión iniciada")
+    st.rerun()
+
+
+def detener_sesion(idea_id, index):
+    fin = datetime.now(pytz.UTC)
+    collection.update_one(
+        {"_id": ObjectId(idea_id)},
+        {f"$set": {f"sessions.{index}.fin": fin}}
+    )
+    st.success("⏹ Sesión detenida")
+
+    # opcional: guardar nota automática
+    duracion_seg = int((fin - parse_datetime(
+        collection.find_one({"_id": ObjectId(idea_id)})["sessions"][index]["inicio"]
+    )).total_seconds())
+    minutos, segundos = divmod(duracion_seg, 60)
+    agregar_nota(idea_id, f"Finalizó sesión de {minutos} min {segundos} seg")
+
+    st.rerun()
+
+
+# ==============================
+# LISTAR IDEAS
+# ==============================
 def listar_ideas():
     st.subheader("📌 Guardadas")
-    ideas = collection.find().sort("timestamp", -1)
 
+    # 🔄 refresco automático cada 1 segundo
+    st_autorefresh(interval=1000, key="refresh")
+
+    ideas = collection.find().sort("timestamp", -1)
     for idea in ideas:
-        fecha_local = parse_datetime(idea["timestamp"]).astimezone(colombia_tz)
-        with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
+        fecha_local = idea["timestamp"].astimezone(colombia_tz)
+        with st.expander(f"💡 {idea['title']} — {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
 
-            # Sesiones
-            if "sessions" in idea and idea["sessions"]:
+            sesiones = idea.get("sessions", [])
+            sesion_activa = None
+
+            if sesiones:
                 st.markdown("**⏱ Sesiones registradas:**")
-                for i, sesion in enumerate(idea["sessions"], start=1):
+
+                for i, sesion in enumerate(sesiones):
                     inicio = parse_datetime(sesion.get("inicio"))
                     fin = parse_datetime(sesion.get("fin"))
 
@@ -117,14 +163,22 @@ def listar_ideas():
                         else:
                             segundos = int((datetime.now(pytz.UTC) - inicio).total_seconds())
                             st.info(f"⏳ Activa: {segundos // 60} min {segundos % 60} seg")
+                            sesion_activa = i
+                            if st.button("⏹ Detener", key=f"stop_{idea['_id']}_{i}"):
+                                detener_sesion(idea["_id"], i)
                     else:
                         st.warning("⚠️ Sesión sin inicio válido")
+
+            # Botón para iniciar sesión solo si NO hay activa
+            if sesion_activa is None:
+                if st.button("▶️ Iniciar nueva sesión", key=f"start_{idea['_id']}"):
+                    iniciar_sesion(idea["_id"])
 
             # Historial de notas
             if "updates" in idea and idea["updates"]:
                 st.markdown("**Trazabilidad / Notas adicionales:**")
                 for note in idea["updates"]:
-                    fecha_nota_local = parse_datetime(note["timestamp"]).astimezone(colombia_tz)
+                    fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
                     st.markdown(
                         f"➡️ {note['text']}  \n ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}"
                     )

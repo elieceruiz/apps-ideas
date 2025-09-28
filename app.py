@@ -1,9 +1,9 @@
-# app.py
 import streamlit as st
 import pytz
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
+from twilio.rest import Client
 
 # ==============================
 # CONFIG
@@ -19,11 +19,18 @@ mongodb_collection_desarrollo = st.secrets["mongodb"]["collection_desarrollo"]
 # Conexión a MongoDB
 client = MongoClient(mongodb_uri)
 db = client[mongodb_db]
-collection = db[mongodb_collection]  # Ideas
-collection_desarrollo = db[mongodb_collection_desarrollo]  # Cronómetro global
+collection = db[mongodb_collection]
+collection_desarrollo = db[mongodb_collection_desarrollo]
 
 # Zona horaria Colombia
 colombia_tz = pytz.timezone("America/Bogota")
+
+# Config Twilio
+twilio_sid = st.secrets["twilio"]["account_sid"]
+twilio_token = st.secrets["twilio"]["auth_token"]
+twilio_from = f"whatsapp:{st.secrets['twilio']['sandbox_number']}"
+twilio_to = f"whatsapp:{st.secrets['twilio']['to_number']}"
+client_twilio = Client(twilio_sid, twilio_token)
 
 st.title("💡 Apps Ideas")
 
@@ -39,8 +46,8 @@ def guardar_idea(titulo: str, descripcion: str):
     nueva_idea = {
         "title": titulo.strip(),
         "description": descripcion.strip(),
-        "timestamp": datetime.now(pytz.UTC),  # siempre guardar en UTC
-        "updates": []  # historial de trazabilidad
+        "timestamp": datetime.now(pytz.UTC),  # siempre en UTC
+        "updates": []
     }
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
@@ -55,7 +62,7 @@ def agregar_nota(idea_id, texto: str):
 
     nueva_actualizacion = {
         "text": texto.strip(),
-        "timestamp": datetime.now(pytz.UTC)  # guardar en UTC
+        "timestamp": datetime.now(pytz.UTC)
     }
     collection.update_one(
         {"_id": idea_id},
@@ -75,7 +82,6 @@ def listar_ideas():
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
 
-            # Historial de actualizaciones
             if "updates" in idea and len(idea["updates"]) > 0:
                 st.markdown("**Trazabilidad / Notas adicionales:**")
                 for note in idea["updates"]:
@@ -85,7 +91,6 @@ def listar_ideas():
                     )
                 st.divider()
 
-            # Formulario para agregar nueva nota
             with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):
                 nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
                 enviar_nota = st.form_submit_button("Guardar nota")
@@ -99,46 +104,57 @@ def listar_ideas():
 # ==============================
 st.subheader("⏱️ Cronómetro Global")
 
-# Estado del cronómetro
-if "cronometro_activo" not in st.session_state:
-    st.session_state.cronometro_activo = False
 if "cronometro_inicio" not in st.session_state:
-    st.session_state.cronometro_inicio = None
-if "cronometro_tiempo" not in st.session_state:
-    st.session_state.cronometro_tiempo = timedelta(0)
+    st.session_state["cronometro_inicio"] = None
+if "cronometro_activo" not in st.session_state:
+    st.session_state["cronometro_activo"] = False
+if "whatsapp_enviado" not in st.session_state:
+    st.session_state["whatsapp_enviado"] = False
 
-# Actualizar tiempo en vivo
-if st.session_state.cronometro_activo and st.session_state.cronometro_inicio:
-    st.session_state.cronometro_tiempo = datetime.now(pytz.UTC) - st.session_state.cronometro_inicio
+col1, col2 = st.columns(2)
 
-tiempo_str = str(st.session_state.cronometro_tiempo).split(".")[0]
-st.metric("Tiempo transcurrido", tiempo_str)
-
-# Botón único
-if not st.session_state.cronometro_activo:
-    if st.button("▶️ Iniciar"):
-        st.session_state.cronometro_activo = True
-        st.session_state.cronometro_inicio = datetime.now(pytz.UTC)
-        st.rerun()
+if not st.session_state["cronometro_activo"]:
+    if col1.button("▶️ Iniciar"):
+        st.session_state["cronometro_inicio"] = datetime.now(pytz.UTC)
+        st.session_state["cronometro_activo"] = True
+        st.session_state["whatsapp_enviado"] = False
 else:
-    if st.button("⏹️ Parar"):
-        st.session_state.cronometro_activo = False
-        tiempo_total = datetime.now(pytz.UTC) - st.session_state.cronometro_inicio
+    if col2.button("⏹️ Parar"):
+        fin = datetime.now(pytz.UTC)
+        duracion = fin - st.session_state["cronometro_inicio"]
 
-        # Guardar en Mongo
+        registro = {
+            "inicio": st.session_state["cronometro_inicio"],
+            "fin": fin,
+            "duracion_segundos": int(duracion.total_seconds())
+        }
+        collection_desarrollo.insert_one(registro)
+
+        st.session_state["cronometro_inicio"] = None
+        st.session_state["cronometro_activo"] = False
+        st.session_state["whatsapp_enviado"] = False
+
+# Refresco automático al segundo
+st_autorefresh(interval=1000, key="cronometro_refresh")
+
+# Mostrar tiempo transcurrido
+if st.session_state["cronometro_activo"] and st.session_state["cronometro_inicio"]:
+    transcurrido = datetime.now(pytz.UTC) - st.session_state["cronometro_inicio"]
+    st.write("Tiempo transcurrido:")
+    st.write(str(transcurrido).split(".")[0])  # quitar microsegundos
+
+    # Enviar WhatsApp a los 3 minutos (180s)
+    if transcurrido >= timedelta(minutes=3) and not st.session_state["whatsapp_enviado"]:
         try:
-            collection_desarrollo.insert_one({
-                "inicio": st.session_state.cronometro_inicio,
-                "fin": datetime.now(pytz.UTC),
-                "duracion": tiempo_total
-            })
-            st.success(f"✅ Cronómetro guardado: {tiempo_total}")
+            client_twilio.messages.create(
+                body="📲 Han pasado 3 minutos desde que iniciaste el cronómetro.",
+                from_=twilio_from,
+                to=twilio_to
+            )
+            st.session_state["whatsapp_enviado"] = True
+            st.success("✅ WhatsApp enviado a los 3 minutos")
         except Exception as e:
-            st.error(f"❌ Error al guardar en desarrollo: {e}")
-
-# Auto-refresh cada segundo si está activo
-if st.session_state.cronometro_activo:
-    st_autorefresh(interval=1000, key="cronometro_refresh")
+            st.error(f"❌ Error enviando WhatsApp: {e}")
 
 # ==============================
 # UI PRINCIPAL

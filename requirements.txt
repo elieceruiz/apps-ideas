@@ -3,3 +3,4 @@ streamlit
 pymongo
 pytz
 twilio
+streamlit-autorefresh

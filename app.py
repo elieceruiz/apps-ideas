@@ -82,7 +82,9 @@ def listar_ideas():
                     fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
 
                     if not note.get("done", False):
-                        # Notas pendientes → checkbox
+                        # ============================
+                        # NOTA PENDIENTE → CHECKBOX
+                        # ============================
                         col1, col2 = st.columns([0.1, 0.9])
                         with col1:
                             checked = st.checkbox("", key=f"chk_{idea['_id']}_{idx}", value=False)
@@ -104,13 +106,19 @@ def listar_ideas():
                             st.rerun()
 
                     else:
-                        # Notas completadas
+                        # ============================
+                        # NOTA COMPLETADA → ✅ + RESTA
+                        # ============================
                         done_at = note.get("done_at")
                         done_local = done_at.astimezone(colombia_tz) if done_at else None
+
+                        # Calcular diferencia entre idea (timestamp) y ejecución (done_at)
                         duracion = ""
                         if done_at:
                             delta = done_at - note["timestamp"]
-                            duracion = f"⏱️ {str(delta)}"
+                            horas, resto = divmod(delta.total_seconds(), 3600)
+                            minutos, segundos = divmod(resto, 60)
+                            duracion = f"⏱️ {int(horas)}h {int(minutos)}m {int(segundos)}s"
 
                         st.markdown(
                             f"✔️ ~~{note['text']}~~  \n "

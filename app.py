@@ -153,7 +153,7 @@ with tab_guardadas:
             with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):
                 nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
                 enviar_nota = st.form_submit_button("Guardar nota")
-                if envio:
+                if enviar_nota:
                     agregar_nota(idea["_id"], nueva_nota)
                     st.rerun()
 

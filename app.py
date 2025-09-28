@@ -139,22 +139,21 @@ with tab_guardadas:
                     fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
 
                     if not note.get("done", False):
-                        col_text, col_chk = st.columns([0.9, 0.1])
+                        col_text, col_btn = st.columns([0.85, 0.15])
                         with col_text:
                             st.markdown(f"➡️ {note['text']}  ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}")
-                        with col_chk:
-                            checked = st.checkbox("", key=f"chk_{idea['_id']}_{idx}", value=False)
-                        if checked:
-                            done_at = datetime.now(pytz.UTC)
-                            collection.update_one(
-                                {"_id": idea["_id"]},
-                                {"$set": {
-                                    f"updates.{idx}.done": True,
-                                    f"updates.{idx}.done_at": done_at
-                                }}
-                            )
-                            st.success("✅ Nota marcada como acción ejecutada")
-                            st.rerun()
+                        with col_btn:
+                            if st.button("Listo!!!", key=f"btn_{idea['_id']}_{idx}"):
+                                done_at = datetime.now(pytz.UTC)
+                                collection.update_one(
+                                    {"_id": idea["_id"]},
+                                    {"$set": {
+                                        f"updates.{idx}.done": True,
+                                        f"updates.{idx}.done_at": done_at
+                                    }}
+                                )
+                                st.success("✅ Nota marcada como acción ejecutada")
+                                st.rerun()
 
                     else:
                         done_at = note.get("done_at")

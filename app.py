@@ -65,6 +65,7 @@ def agregar_nota(idea_id, texto: str):
     st.success("📝 Nota agregada a la idea")
     return True
 
+
 # ==============================
 # FUNCIONES DESARROLLO
 # ==============================
@@ -106,16 +107,17 @@ def cronometro_desarrollo():
             })
             st.rerun()
 
+
 # ==============================
-# UI PRINCIPAL con contador antes de expanders en Guardadas y checkbox corregido
+# UI PRINCIPAL con contador y checkbox sin columna
 # ==============================
 tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
     ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"]
 )
 
 with tab_guardadas:
-    ideas = list(collection.find().sort("timestamp", -1))  # Obtener ideas primero
-    st.subheader(f"📌 {len(ideas)} guardadas")              # Mostrar contador antes
+    ideas = list(collection.find().sort("timestamp", -1))
+    st.subheader(f"📌 {len(ideas)} guardadas")
 
     for idea in ideas:
         fecha_local = idea["timestamp"].astimezone(colombia_tz)
@@ -128,40 +130,43 @@ with tab_guardadas:
                 for idx, note in enumerate(idea["updates"]):
                     fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
 
-                    if not note.get("done", False):
-                        col_text, col_chk = st.columns([0.9, 0.1])
-                        with col_text:
-                            st.markdown(f"➡️ {note['text']}  ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}")
-                        with col_chk:
-                            checked = st.checkbox("", key=f"chk_{idea['_id']}_{idx}", value=False)
-                        if checked:
-                            done_at = datetime.now(pytz.UTC)
-                            collection.update_one(
-                                {"_id": idea["_id"]},
-                                {"$set": {
-                                    f"updates.{idx}.done": True,
-                                    f"updates.{idx}.done_at": done_at
-                                }}
-                            )
-                            st.success("✅ Nota marcada como acción ejecutada")
-                            st.rerun()
+                    key = f"chk_{idea['_id']}_{idx}"
+                    checked = st.checkbox("", key=key, label_visibility="collapsed", value=note.get("done", False))
 
-                    else:
+                    # Mostrar la nota con check emoji adelante si está marcada
+                    texto_mostrar = f"➡️ {note['text']}  ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}"
+                    if checked:
+                        texto_mostrar = "✔️ ~~" + note['text'] + "~~" + f"  ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}"
+
+                    st.markdown(texto_mostrar)
+
+                    # Actualizar en DB si cambió el estado del checkbox
+                    if checked and not note.get("done", False):
+                        done_at = datetime.now(pytz.UTC)
+                        collection.update_one(
+                            {"_id": idea["_id"]},
+                            {"$set": {
+                                f"updates.{idx}.done": True,
+                                f"updates.{idx}.done_at": done_at
+                            }}
+                        )
+                        st.success("✅ Nota marcada como acción ejecutada")
+                        st.rerun()
+
+                    # Mostrar duración y fecha completada si está done
+                    if checked:
                         done_at = note.get("done_at")
-                        done_local = done_at.astimezone(colombia_tz) if done_at else None
-                        duracion = ""
                         if done_at:
+                            done_local = done_at.astimezone(colombia_tz)
                             delta = done_at - note["timestamp"]
                             horas, resto = divmod(delta.total_seconds(), 3600)
                             minutos, segundos = divmod(resto, 60)
                             duracion = f"⏱️ {int(horas)}h {int(minutos)}m {int(segundos)}s"
 
-                        st.markdown(
-                            f"✔️ ~~{note['text']}~~  \n "
-                            f"⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')} → "
-                            f"{done_local.strftime('%Y-%m-%d %H:%M') if done_local else ''}  \n "
-                            f"{duracion}"
-                        )
+                            st.markdown(
+                                f"⏰ {done_local.strftime('%Y-%m-%d %H:%M')}  \n{duracion}"
+                            )
+
                 st.divider()
 
             with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):

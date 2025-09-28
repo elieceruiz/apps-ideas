@@ -181,11 +181,15 @@ def cronometro_desarrollo():
             st.rerun()
 
 # ==============================
-# UI PRINCIPAL
+# UI PRINCIPAL con nueva pestaña para Guardadas
 # ==============================
-tab1, tab2 = st.tabs(["💡 Ideas", "💻 Desarrollo"])
+tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"])
 
-with tab1:
+with tab_guardadas:
+    # Mostrar las ideas guardadas aquí
+    listar_ideas()
+
+with tab_ideas:
     with st.form("form_agregar_idea", clear_on_submit=True):
         titulo_idea = st.text_input("Título de la idea")
         descripcion_idea = st.text_area("Descripción de la idea")
@@ -195,7 +199,5 @@ with tab1:
             guardar_idea(titulo_idea, descripcion_idea)
             st.rerun()
 
-    listar_ideas()
-
-with tab2:
+with tab_desarrollo:
     cronometro_desarrollo()

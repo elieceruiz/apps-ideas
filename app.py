@@ -2,7 +2,7 @@
 import streamlit as st
 import pytz
 from pymongo import MongoClient
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ==============================
 # CONFIG
@@ -37,7 +37,8 @@ def guardar_idea(titulo: str, descripcion: str):
         "title": titulo.strip(),
         "description": descripcion.strip(),
         "timestamp": datetime.now(pytz.UTC),  # siempre guardar en UTC
-        "updates": []  # historial de trazabilidad
+        "updates": [],   # historial de trazabilidad
+        "sessions": []   # historial de sesiones
     }
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
@@ -62,8 +63,27 @@ def agregar_nota(idea_id, texto: str):
     return True
 
 
+def iniciar_sesion(idea_id):
+    """Inicia una nueva sesión de cronómetro para la idea."""
+    nueva_sesion = {"inicio": datetime.now(pytz.UTC), "fin": None}
+    collection.update_one(
+        {"_id": idea_id},
+        {"$push": {"sessions": nueva_sesion}}
+    )
+    st.rerun()
+
+
+def detener_sesion(idea_id):
+    """Detiene la sesión activa de cronómetro de la idea."""
+    collection.update_one(
+        {"_id": idea_id, "sessions.fin": None},
+        {"$set": {"sessions.$.fin": datetime.now(pytz.UTC)}}
+    )
+    st.rerun()
+
+
 def listar_ideas():
-    """Muestra las ideas guardadas con su trazabilidad y formulario de notas."""
+    """Muestra las ideas guardadas con su trazabilidad, cronómetro y notas."""
     st.subheader("📌 Guardadas")
     ideas = collection.find().sort("timestamp", -1)
 
@@ -72,7 +92,38 @@ def listar_ideas():
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
 
-            # Historial de actualizaciones
+            # ========== CRONÓMETRO ==========
+            sesiones = idea.get("sessions", [])
+            sesion_activa = None
+            for sesion in sesiones:
+                if sesion["fin"] is None:
+                    sesion_activa = sesion
+                    break
+
+            if sesion_activa:
+                inicio_local = sesion_activa["inicio"].astimezone(colombia_tz)
+                segundos = int((datetime.now(pytz.UTC) - sesion_activa["inicio"]).total_seconds())
+                st.markdown(f"### ⏱ En curso: {str(timedelta(seconds=segundos))}")
+                st.caption(f"Desde {inicio_local.strftime('%Y-%m-%d %H:%M:%S')}")
+                if st.button("⏹️ Detener", key=f"stop_{idea['_id']}"):
+                    detener_sesion(idea["_id"])
+            else:
+                if st.button("🟢 Iniciar cronómetro", key=f"start_{idea['_id']}"):
+                    iniciar_sesion(idea["_id"])
+
+            # Historial de sesiones cerradas
+            sesiones_cerradas = [s for s in sesiones if s["fin"] is not None]
+            if sesiones_cerradas:
+                st.markdown("**Historial de sesiones:**")
+                for s in reversed(sesiones_cerradas):
+                    ini = s["inicio"].astimezone(colombia_tz)
+                    fin = s["fin"].astimezone(colombia_tz)
+                    duracion = str(fin - ini).split(".")[0]
+                    st.markdown(f"✅ {duracion}  ({ini.strftime('%Y-%m-%d %H:%M')} → {fin.strftime('%H:%M')})")
+
+            st.divider()
+
+            # ========== TRAZABILIDAD ==========
             if "updates" in idea and len(idea["updates"]) > 0:
                 st.markdown("**Trazabilidad / Notas adicionales:**")
                 for note in idea["updates"]:
@@ -90,6 +141,7 @@ def listar_ideas():
                 if enviar_nota:
                     agregar_nota(idea["_id"], nueva_nota)
                     st.rerun()
+
 
 # ==============================
 # UI PRINCIPAL

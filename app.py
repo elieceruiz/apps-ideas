@@ -46,6 +46,7 @@ def guardar_idea(titulo: str, descripcion: str):
     st.success("✅ Idea guardada correctamente")
     return True
 
+
 def agregar_nota(idea_id, texto: str):
     if texto.strip() == "":
         st.error("La nota no puede estar vacía")
@@ -53,7 +54,9 @@ def agregar_nota(idea_id, texto: str):
 
     nueva_actualizacion = {
         "text": texto.strip(),
-        "timestamp": datetime.now(pytz.UTC)
+        "timestamp": datetime.now(pytz.UTC),
+        "done": False,
+        "done_at": None
     }
     collection.update_one(
         {"_id": idea_id},
@@ -61,6 +64,7 @@ def agregar_nota(idea_id, texto: str):
     )
     st.success("📝 Nota agregada a la idea")
     return True
+
 
 def listar_ideas():
     st.subheader("📌 Guardadas")
@@ -73,13 +77,51 @@ def listar_ideas():
 
             if "updates" in idea and len(idea["updates"]) > 0:
                 st.markdown("**Trazabilidad / Notas adicionales:**")
-                for note in idea["updates"]:
+
+                for idx, note in enumerate(idea["updates"]):
                     fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
-                    st.markdown(
-                        f"➡️ {note['text']}  \n ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}"
-                    )
+
+                    if not note.get("done", False):
+                        # Notas pendientes → checkbox
+                        col1, col2 = st.columns([0.1, 0.9])
+                        with col1:
+                            checked = st.checkbox("", key=f"chk_{idea['_id']}_{idx}", value=False)
+                        with col2:
+                            st.markdown(
+                                f"➡️ {note['text']}  \n ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}"
+                            )
+
+                        if checked:
+                            done_at = datetime.now(pytz.UTC)
+                            collection.update_one(
+                                {"_id": idea["_id"]},
+                                {"$set": {
+                                    f"updates.{idx}.done": True,
+                                    f"updates.{idx}.done_at": done_at
+                                }}
+                            )
+                            st.success("✅ Nota marcada como acción ejecutada")
+                            st.rerun()
+
+                    else:
+                        # Notas completadas
+                        done_at = note.get("done_at")
+                        done_local = done_at.astimezone(colombia_tz) if done_at else None
+                        duracion = ""
+                        if done_at:
+                            delta = done_at - note["timestamp"]
+                            duracion = f"⏱️ {str(delta)}"
+
+                        st.markdown(
+                            f"✔️ ~~{note['text']}~~  \n "
+                            f"⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')} → "
+                            f"{done_local.strftime('%Y-%m-%d %H:%M') if done_local else ''}  \n "
+                            f"{duracion}"
+                        )
+
                 st.divider()
 
+            # Formulario para nueva nota
             with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):
                 nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
                 enviar_nota = st.form_submit_button("Guardar nota")
@@ -95,6 +137,7 @@ def to_datetime_local(dt):
     if not isinstance(dt, datetime):
         dt = parse(str(dt))
     return dt.astimezone(colombia_tz)
+
 
 def cronometro_desarrollo():
     st.subheader("⏳ Tiempo invertido en el desarrollo de la App")

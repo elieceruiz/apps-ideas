@@ -67,9 +67,9 @@ def agregar_nota(idea_id, texto: str):
 
 
 def listar_ideas():
-    st.subheader("📌 Guardadas")
-    ideas = collection.find().sort("timestamp", -1)
-
+    ideas = list(collection.find().sort("timestamp", -1))
+    count = len(ideas)
+    
     for idea in ideas:
         fecha_local = idea["timestamp"].astimezone(colombia_tz)
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
@@ -138,6 +138,8 @@ def listar_ideas():
                     agregar_nota(idea["_id"], nueva_nota)
                     st.rerun()
 
+    return count
+
 # ==============================
 # FUNCIONES DESARROLLO
 # ==============================
@@ -181,13 +183,13 @@ def cronometro_desarrollo():
             st.rerun()
 
 # ==============================
-# UI PRINCIPAL con nueva pestaña para Guardadas
+# UI PRINCIPAL con nueva pestaña para Guardadas y contador
 # ==============================
 tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"])
 
 with tab_guardadas:
-    # Mostrar las ideas guardadas aquí
-    listar_ideas()
+    ideas_count = listar_ideas()
+    st.markdown(f"📌 {ideas_count} guardadas")
 
 with tab_ideas:
     with st.form("form_agregar_idea", clear_on_submit=True):

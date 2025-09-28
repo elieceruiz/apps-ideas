@@ -123,6 +123,15 @@ with tab_guardadas:
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
 
+            # 👉 Agregar nota PRIMERO
+            with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):
+                nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
+                enviar_nota = st.form_submit_button("Guardar nota")
+                if enviar_nota:
+                    agregar_nota(idea["_id"], nueva_nota)
+                    st.rerun()
+
+            # 👉 Luego mostrar trazabilidad
             if "updates" in idea and len(idea["updates"]) > 0:
                 st.markdown("**Trazabilidad / Notas adicionales:**")
 
@@ -164,13 +173,6 @@ with tab_guardadas:
                             f"{duracion}"
                         )
                 st.divider()
-
-            with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):
-                nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
-                enviar_nota = st.form_submit_button("Guardar nota")
-                if enviar_nota:
-                    agregar_nota(idea["_id"], nueva_nota)
-                    st.rerun()
 
 with tab_ideas:
     with st.form("form_agregar_idea", clear_on_submit=True):

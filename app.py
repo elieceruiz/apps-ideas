@@ -3,7 +3,7 @@ import streamlit as st
 import pytz
 from pymongo import MongoClient
 from datetime import datetime
-from dateutil import parser
+from bson import ObjectId
 from twilio.rest import Client
 
 # ==============================
@@ -11,25 +11,23 @@ from twilio.rest import Client
 # ==============================
 st.set_page_config(page_title="💡 Apps Ideas", page_icon="💡", layout="centered")
 
-# Leer configuración MongoDB de Secrets
+# MongoDB
 mongodb_uri = st.secrets["mongodb"]["uri"]
 mongodb_db = st.secrets["mongodb"]["db"]
 mongodb_collection = st.secrets["mongodb"]["collection"]
 
-# Config Twilio
-twilio_sid = st.secrets["twilio"]["account_sid"]
-twilio_token = st.secrets["twilio"]["auth_token"]
-twilio_from = f"whatsapp:{st.secrets['twilio']['sandbox_number']}"
-twilio_to = f"whatsapp:{st.secrets['twilio']['to_number']}"
-
-twilio_client = Client(twilio_sid, twilio_token)
-
-# Conexión a MongoDB
 client = MongoClient(mongodb_uri)
 db = client[mongodb_db]
 collection = db[mongodb_collection]
 
-# Zona horaria Colombia
+# Twilio
+twilio_sid = st.secrets["twilio"]["account_sid"]
+twilio_token = st.secrets["twilio"]["auth_token"]
+twilio_from = st.secrets["twilio"]["sandbox_number"]
+twilio_to = st.secrets["twilio"]["to_number"]
+twilio_client = Client(twilio_sid, twilio_token)
+
+# Zona horaria
 colombia_tz = pytz.timezone("America/Bogota")
 
 st.title("💡 Apps Ideas")
@@ -37,8 +35,17 @@ st.title("💡 Apps Ideas")
 # ==============================
 # FUNCIONES
 # ==============================
+def parse_datetime(value):
+    """Convierte value a datetime si viene como string ISO."""
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
 def guardar_idea(titulo: str, descripcion: str):
-    """Guarda una nueva idea en la colección."""
     if titulo.strip() == "" or descripcion.strip() == "":
         st.error("Complete todos los campos por favor")
         return False
@@ -46,9 +53,9 @@ def guardar_idea(titulo: str, descripcion: str):
     nueva_idea = {
         "title": titulo.strip(),
         "description": descripcion.strip(),
-        "timestamp": datetime.now(pytz.UTC),  # siempre guardar en UTC
+        "timestamp": datetime.now(pytz.UTC),
         "updates": [],
-        "sessions": []  # ahora cada idea podrá tener sesiones
+        "sessions": []  # sesiones de trabajo
     }
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
@@ -56,7 +63,6 @@ def guardar_idea(titulo: str, descripcion: str):
 
 
 def agregar_nota(idea_id, texto: str):
-    """Agrega una nota de trazabilidad a una idea existente."""
     if texto.strip() == "":
         st.error("La nota no puede estar vacía")
         return False
@@ -66,67 +72,25 @@ def agregar_nota(idea_id, texto: str):
         "timestamp": datetime.now(pytz.UTC)
     }
     collection.update_one(
-        {"_id": idea_id},
+        {"_id": ObjectId(idea_id)},
         {"$push": {"updates": nueva_actualizacion}}
     )
     st.success("📝 Nota agregada a la idea")
-    return True
 
-
-def iniciar_sesion(idea_id):
-    """Inicia una sesión de cronómetro para una idea."""
-    nueva_sesion = {
-        "inicio": datetime.now(pytz.UTC),
-        "fin": None
-    }
-    collection.update_one(
-        {"_id": idea_id},
-        {"$push": {"sessions": nueva_sesion}}
-    )
-    st.success("▶️ Sesión iniciada")
-    # Enviar WhatsApp inmediato
+    # Notificación por Twilio
     try:
-        mensaje = f"🚀 Iniciaste sesión de trabajo en tu idea."
-        msg = twilio_client.messages.create(
-            body=mensaje,
+        twilio_client.messages.create(
+            body=f"Nueva nota en idea {idea_id}: {texto.strip()}",
             from_=twilio_from,
             to=twilio_to
         )
-        st.info(f"📤 Debug Twilio SID: {msg.sid}")
     except Exception as e:
-        st.error(f"⚠️ Error al enviar WhatsApp: {e}")
+        st.warning(f"⚠️ No se pudo enviar mensaje Twilio: {e}")
 
-
-def detener_sesion(idea_id):
-    """Detiene la última sesión activa de una idea."""
-    idea = collection.find_one({"_id": idea_id})
-    if not idea or "sessions" not in idea or len(idea["sessions"]) == 0:
-        st.warning("⚠️ No hay sesiones para detener")
-        return
-
-    ultima = idea["sessions"][-1]
-    if ultima["fin"] is None:
-        collection.update_one(
-            {"_id": idea_id, "sessions.inicio": ultima["inicio"]},
-            {"$set": {"sessions.$.fin": datetime.now(pytz.UTC)}}
-        )
-        st.success("⏹ Sesión detenida")
-        try:
-            mensaje = f"✅ Finalizaste sesión de trabajo en tu idea."
-            msg = twilio_client.messages.create(
-                body=mensaje,
-                from_=twilio_from,
-                to=twilio_to
-            )
-            st.info(f"📤 Debug Twilio SID: {msg.sid}")
-        except Exception as e:
-            st.error(f"⚠️ Error al enviar WhatsApp: {e}")
-    else:
-        st.warning("⚠️ No hay sesión activa")
+    return True
 
 
 def listar_ideas():
-    """Muestra las ideas guardadas con trazabilidad y cronómetro."""
     st.subheader("📌 Guardadas")
     ideas = collection.find().sort("timestamp", -1)
 
@@ -135,46 +99,24 @@ def listar_ideas():
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
 
-            # =========================
-            # Cronómetro de sesiones
-            # =========================
-            sesiones = idea.get("sessions", [])
-            sesion_activa = None
-            for s in sesiones:
-                if s["fin"] is None:
-                    sesion_activa = s
-                    break
+            # Sesiones (debug incl.)
+            if "sessions" in idea and idea["sessions"]:
+                st.markdown("**⏱ Sesiones registradas:**")
+                for sesion in idea["sessions"]:
+                    inicio = parse_datetime(sesion.get("inicio"))
+                    fin = parse_datetime(sesion.get("fin"))
+                    if inicio:
+                        if fin:
+                            duracion = int((fin - inicio).total_seconds())
+                            st.write(f"✔️ {duracion // 60} min {duracion % 60} seg")
+                        else:
+                            segundos = int((datetime.now(pytz.UTC) - inicio).total_seconds())
+                            st.write(f"⏳ Activa: {segundos // 60} min {segundos % 60} seg")
+                    else:
+                        st.write("⚠️ Sesión con inicio inválido:", sesion)
 
-            if sesion_activa:
-                inicio = sesion_activa.get("inicio")
-                if isinstance(inicio, str):
-                    try:
-                        inicio = parser.parse(inicio)
-                    except Exception:
-                        inicio = None
-
-                if isinstance(inicio, datetime):
-                    segundos = int((datetime.now(pytz.UTC) - inicio).total_seconds())
-                    horas, resto = divmod(segundos, 3600)
-                    minutos, segundos = divmod(resto, 60)
-                    st.markdown(
-                        f"⏱ **Cronómetro en curso:** {horas:02}:{minutos:02}:{segundos:02}"
-                    )
-                else:
-                    st.warning("⚠️ Cronómetro activo pero sin fecha válida (debug).")
-
-                if st.button("⏹ Detener sesión", key=f"stop_{idea['_id']}"):
-                    detener_sesion(idea["_id"])
-                    st.rerun()
-            else:
-                if st.button("▶️ Iniciar sesión", key=f"start_{idea['_id']}"):
-                    iniciar_sesion(idea["_id"])
-                    st.rerun()
-
-            # =========================
-            # Historial de actualizaciones
-            # =========================
-            if "updates" in idea and len(idea["updates"]) > 0:
+            # Historial de notas
+            if "updates" in idea and idea["updates"]:
                 st.markdown("**Trazabilidad / Notas adicionales:**")
                 for note in idea["updates"]:
                     fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
@@ -183,15 +125,13 @@ def listar_ideas():
                     )
                 st.divider()
 
-            # Formulario para agregar nueva nota
+            # Formulario nota
             with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):
                 nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
                 enviar_nota = st.form_submit_button("Guardar nota")
-
                 if enviar_nota:
                     agregar_nota(idea["_id"], nueva_nota)
                     st.rerun()
-
 
 # ==============================
 # UI PRINCIPAL

@@ -3,6 +3,7 @@ import streamlit as st
 import pytz
 from pymongo import MongoClient
 from datetime import datetime
+from dateutil import parser
 
 # ==============================
 # CONFIG
@@ -69,6 +70,10 @@ def listar_ideas():
     ideas = collection.find().sort("timestamp", -1)
 
     for idea in ideas:
+        # Asegurar campo sessions para ideas viejas
+        if "sessions" not in idea:
+            idea["sessions"] = []
+
         fecha_local = idea["timestamp"].astimezone(colombia_tz)
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
@@ -79,11 +84,9 @@ def listar_ideas():
             sesiones = idea.get("sessions", [])
             sesion_activa = next((s for s in sesiones if s.get("fin") is None), None)
 
-            # Mostrar cronómetro si hay sesión activa
             if sesion_activa:
                 inicio = sesion_activa["inicio"]
                 if isinstance(inicio, str):
-                    from dateutil import parser
                     inicio = parser.parse(inicio)
 
                 segundos = int((datetime.now(pytz.UTC) - inicio).total_seconds())
@@ -119,13 +122,11 @@ def listar_ideas():
                     fin = sesion.get("fin")
 
                     if isinstance(inicio, str):
-                        from dateutil import parser
                         inicio = parser.parse(inicio)
                     inicio_local = inicio.astimezone(colombia_tz)
 
                     if fin:
                         if isinstance(fin, str):
-                            from dateutil import parser
                             fin = parser.parse(fin)
                         fin_local = fin.astimezone(colombia_tz)
                         duracion = fin - inicio

@@ -1,7 +1,6 @@
 # app.py
 import streamlit as st
 import pytz
-import time
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 from dateutil.parser import parse
@@ -12,13 +11,13 @@ import pandas as pd
 # ==============================
 st.set_page_config(page_title="💡 Apps Ideas", page_icon="💡", layout="centered")
 
-# Configuración MongoDB Secrets
+# Leer configuración MongoDB de Secrets
 mongodb_uri = st.secrets["mongodb"]["uri"]
 mongodb_db = st.secrets["mongodb"]["db"]
 mongodb_collection = st.secrets["mongodb"]["collection"]
 mongodb_collection_desarrollo = st.secrets["mongodb"]["collection_desarrollo"]
 
-# Conexión MongoDB
+# Conexión a MongoDB
 client = MongoClient(mongodb_uri)
 db = client[mongodb_db]
 collection = db[mongodb_collection]
@@ -29,7 +28,9 @@ colombia_tz = pytz.timezone("America/Bogota")
 
 st.title("💡 Apps Ideas")
 
-# Guardar idea
+# ==============================
+# FUNCIONES IDEAS
+# ==============================
 def guardar_idea(titulo: str, descripcion: str):
     if titulo.strip() == "" or descripcion.strip() == "":
         st.error("Complete todos los campos por favor")
@@ -44,7 +45,6 @@ def guardar_idea(titulo: str, descripcion: str):
     st.success("✅ Idea guardada correctamente")
     return True
 
-# Agregar nota a idea
 def agregar_nota(idea_id, texto: str):
     if texto.strip() == "":
         st.error("La nota no puede estar vacía")
@@ -67,6 +67,9 @@ def to_datetime_local(dt):
         dt = parse(str(dt))
     return dt.astimezone(colombia_tz)
 
+# ==============================
+# UI con pestañas (tabs)
+# ==============================
 tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
     ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"]
 )
@@ -135,26 +138,21 @@ with tab_desarrollo:
 
     if evento:
         hora_inicio = to_datetime_local(evento["inicio"])
-        segundos_transcurridos = int((datetime.now(colombia_tz) - hora_inicio).total_seconds())
+        duracion = datetime.now(colombia_tz) - hora_inicio
+        duracion_str = str(duracion).split('.')[0]
+
         st.success(f"🟢 Desarrollo en curso desde las {hora_inicio.strftime('%H:%M:%S')}")
-        cronometro = st.empty()
-        stop_button = st.button("⏹️ Finalizar desarrollo", key="stop_dev")
+        st.markdown(f"### ⏱️ Duración: {duracion_str}")
 
-        for i in range(segundos_transcurridos, segundos_transcurridos + 100000):
-            if stop_button:
-                dev_collection.update_one(
-                    {"_id": evento["_id"]},
-                    {"$set": {"fin": datetime.now(colombia_tz), "en_curso": False}}
-                )
-                st.success("✅ Registro finalizado.")
-                st.rerun()
-
-            duracion_texto = str(timedelta(seconds=i))
-            cronometro.markdown(f"### ⏱️ Duración: {duracion_texto}")
-            time.sleep(1)
+        if st.button("⏹️ Finalizar desarrollo"):
+            dev_collection.update_one(
+                {"_id": evento["_id"]},
+                {"$set": {"fin": datetime.now(colombia_tz), "en_curso": False}}
+            )
+            st.rerun()
     else:
         st.info("No hay desarrollo en curso.")
-        if st.button("🟢 Iniciar desarrollo", key="start_dev"):
+        if st.button("🟢 Iniciar desarrollo"):
             dev_collection.insert_one({
                 "tipo": "dev_app",
                 "inicio": datetime.now(colombia_tz),
@@ -177,12 +175,11 @@ with tab_desarrollo:
                 fin_local = fin_local.astimezone(colombia_tz)
             tiempo_final = fin_local if fin_local else ahora
             duracion_timedelta = tiempo_final - inicio_local if inicio_local else timedelta(0)
-            duracion_str = str(duracion_timedelta).split('.')[0]  # Sin microsegundos
+            duracion_str = str(duracion_timedelta).split('.')[0]
             data.append({
                 "Inicio": inicio_local.strftime("%Y-%m-%d %H:%M:%S") if inicio_local else "",
                 "Fin": fin_local.strftime("%Y-%m-%d %H:%M:%S") if fin_local else "",
                 "Duración": duracion_str,
-                "En curso": "Sí" if ev.get("en_curso", False) else "No"
             })
         df = pd.DataFrame(data)
         st.dataframe(df, use_container_width=True)

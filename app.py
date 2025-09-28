@@ -11,26 +11,20 @@ import pandas as pd
 # ==============================
 st.set_page_config(page_title="💡 Apps Ideas", page_icon="💡", layout="centered")
 
-# Leer configuración MongoDB de Secrets
 mongodb_uri = st.secrets["mongodb"]["uri"]
 mongodb_db = st.secrets["mongodb"]["db"]
 mongodb_collection = st.secrets["mongodb"]["collection"]
 mongodb_collection_desarrollo = st.secrets["mongodb"]["collection_desarrollo"]
 
-# Conexión a MongoDB
 client = MongoClient(mongodb_uri)
 db = client[mongodb_db]
 collection = db[mongodb_collection]
 dev_collection = db[mongodb_collection_desarrollo]
 
-# Zona horaria Colombia
 colombia_tz = pytz.timezone("America/Bogota")
 
 st.title("💡 Apps Ideas")
 
-# ==============================
-# FUNCIONES IDEAS
-# ==============================
 def guardar_idea(titulo: str, descripcion: str):
     if titulo.strip() == "" or descripcion.strip() == "":
         st.error("Complete todos los campos por favor")
@@ -68,7 +62,7 @@ def to_datetime_local(dt):
     return dt.astimezone(colombia_tz)
 
 # ==============================
-# UI con pestañas (tabs)
+# UI Tabs
 # ==============================
 tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
     ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"]
@@ -138,10 +132,20 @@ with tab_desarrollo:
 
     if evento:
         hora_inicio = to_datetime_local(evento["inicio"])
-        duracion = datetime.now(colombia_tz) - hora_inicio
+
+        # Guardar en session_state inicio real para mantener constante y evitar salto
+        if "inicio_dev" not in st.session_state:
+            st.session_state.inicio_dev = hora_inicio
+
+        # Usar st_autorefresh para actualizar cada segundo
+        refresco = st.experimental_memo(lambda: None, ttl=1)
+        refresco()
+
+        # Calcular duración desde inicio en session_state
+        duracion = datetime.now(colombia_tz) - st.session_state.inicio_dev
         duracion_str = str(duracion).split('.')[0]
 
-        st.success(f"🟢 Desarrollo en curso desde las {hora_inicio.strftime('%H:%M:%S')}")
+        st.success(f"🟢 Desarrollo en curso desde las {st.session_state.inicio_dev.strftime('%H:%M:%S')}")
         st.markdown(f"### ⏱️ Duración: {duracion_str}")
 
         if st.button("⏹️ Finalizar desarrollo"):
@@ -149,8 +153,14 @@ with tab_desarrollo:
                 {"_id": evento["_id"]},
                 {"$set": {"fin": datetime.now(colombia_tz), "en_curso": False}}
             )
+            # Limpiar la sesión
+            del st.session_state.inicio_dev
             st.rerun()
     else:
+        # Limpiar la session_state si no hay evento en curso
+        if "inicio_dev" in st.session_state:
+            del st.session_state.inicio_dev
+
         st.info("No hay desarrollo en curso.")
         if st.button("🟢 Iniciar desarrollo"):
             dev_collection.insert_one({
@@ -182,4 +192,8 @@ with tab_desarrollo:
                 "Duración": duracion_str,
             })
         df = pd.DataFrame(data)
+        # Agrega la numeración al final de la tabla
+        df.insert(len(df.columns), "#", range(1, len(df) + 1))
+        cols = [c for c in df.columns if c != "#"] + ["#"]
+        df = df[cols]
         st.dataframe(df, use_container_width=True)

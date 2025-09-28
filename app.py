@@ -25,19 +25,6 @@ colombia_tz = pytz.timezone("America/Bogota")
 st.title("💡 Apps Ideas")
 
 # ==============================
-# CRONÓMETRO GLOBAL
-# ==============================
-if "start_time" not in st.session_state:
-    st.session_state.start_time = datetime.now(pytz.UTC)
-
-# Calcular tiempo transcurrido
-elapsed = datetime.now(pytz.UTC) - st.session_state.start_time
-horas, resto = divmod(elapsed.total_seconds(), 3600)
-minutos, segundos = divmod(resto, 60)
-
-st.markdown(f"⏱️ Tiempo transcurrido: **{int(horas):02d}:{int(minutos):02d}:{int(segundos):02d}**")
-
-# ==============================
 # FUNCIONES
 # ==============================
 def guardar_idea(titulo: str, descripcion: str):

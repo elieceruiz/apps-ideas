@@ -65,10 +65,59 @@ def agregar_nota(idea_id, texto: str):
     st.success("📝 Nota agregada a la idea")
     return True
 
+# ==============================
+# FUNCIONES DESARROLLO
+# ==============================
+def to_datetime_local(dt):
+    if not isinstance(dt, datetime):
+        dt = parse(str(dt))
+    return dt.astimezone(colombia_tz)
 
-def listar_ideas():
-    ideas = list(collection.find().sort("timestamp", -1))
-    
+def cronometro_desarrollo():
+    st.subheader("⏳ Tiempo invertido en el desarrollo de la App")
+
+    evento = dev_collection.find_one({"tipo": "dev_app", "en_curso": True})
+
+    if evento:
+        hora_inicio = to_datetime_local(evento["inicio"])
+        segundos_transcurridos = int((datetime.now(colombia_tz) - hora_inicio).total_seconds())
+        st.success(f"🟢 Desarrollo en curso desde las {hora_inicio.strftime('%H:%M:%S')}")
+        cronometro = st.empty()
+        stop_button = st.button("⏹️ Finalizar desarrollo", key="stop_dev")
+
+        for i in range(segundos_transcurridos, segundos_transcurridos + 100000):
+            if stop_button:
+                dev_collection.update_one(
+                    {"_id": evento["_id"]},
+                    {"$set": {"fin": datetime.now(colombia_tz), "en_curso": False}}
+                )
+                st.success("✅ Registro finalizado.")
+                st.rerun()
+
+            duracion = str(timedelta(seconds=i))
+            cronometro.markdown(f"### ⏱️ Duración: {duracion}")
+            time.sleep(1)
+    else:
+        if st.button("🟢 Iniciar desarrollo", key="start_dev"):
+            dev_collection.insert_one({
+                "tipo": "dev_app",
+                "inicio": datetime.now(colombia_tz),
+                "en_curso": True
+            })
+            st.rerun()
+
+# ==============================
+# UI PRINCIPAL con contador antes de expanders en Guardadas
+# ==============================
+tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
+    ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"]
+)
+
+with tab_guardadas:
+    ideas = list(collection.find().sort("timestamp", -1))  # Obtener ideas primero
+    st.subheader(f"📌 {len(ideas)} guardadas")              # Mostrar contador antes
+
+    # Mostrar ideas con expanders
     for idea in ideas:
         fecha_local = idea["timestamp"].astimezone(colombia_tz)
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
@@ -124,61 +173,6 @@ def listar_ideas():
                 if enviar_nota:
                     agregar_nota(idea["_id"], nueva_nota)
                     st.rerun()
-
-    return len(ideas)
-
-# ==============================
-# FUNCIONES DESARROLLO
-# ==============================
-def to_datetime_local(dt):
-    if not isinstance(dt, datetime):
-        dt = parse(str(dt))
-    return dt.astimezone(colombia_tz)
-
-
-def cronometro_desarrollo():
-    st.subheader("⏳ Tiempo invertido en el desarrollo de la App")
-
-    evento = dev_collection.find_one({"tipo": "dev_app", "en_curso": True})
-
-    if evento:
-        hora_inicio = to_datetime_local(evento["inicio"])
-        segundos_transcurridos = int((datetime.now(colombia_tz) - hora_inicio).total_seconds())
-        st.success(f"🟢 Desarrollo en curso desde las {hora_inicio.strftime('%H:%M:%S')}")
-        cronometro = st.empty()
-        stop_button = st.button("⏹️ Finalizar desarrollo", key="stop_dev")
-
-        for i in range(segundos_transcurridos, segundos_transcurridos + 100000):
-            if stop_button:
-                dev_collection.update_one(
-                    {"_id": evento["_id"]},
-                    {"$set": {"fin": datetime.now(colombia_tz), "en_curso": False}}
-                )
-                st.success("✅ Registro finalizado.")
-                st.rerun()
-
-            duracion = str(timedelta(seconds=i))
-            cronometro.markdown(f"### ⏱️ Duración: {duracion}")
-            time.sleep(1)
-    else:
-        if st.button("🟢 Iniciar desarrollo", key="start_dev"):
-            dev_collection.insert_one({
-                "tipo": "dev_app",
-                "inicio": datetime.now(colombia_tz),
-                "en_curso": True
-            })
-            st.rerun()
-
-# ==============================
-# UI PRINCIPAL con nueva pestaña para Guardadas y contador
-# ==============================
-tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
-    ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"]
-)
-
-with tab_guardadas:
-    ideas_count = listar_ideas()
-    st.subheader(f"📌 {ideas_count} guardadas")
 
 with tab_ideas:
     with st.form("form_agregar_idea", clear_on_submit=True):

@@ -5,6 +5,7 @@ import time
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 from dateutil.parser import parse
+import pandas as pd
 
 # ==============================
 # CONFIG
@@ -35,7 +36,6 @@ def guardar_idea(titulo: str, descripcion: str):
     if titulo.strip() == "" or descripcion.strip() == "":
         st.error("Complete todos los campos por favor")
         return False
-
     nueva_idea = {
         "title": titulo.strip(),
         "description": descripcion.strip(),
@@ -46,12 +46,10 @@ def guardar_idea(titulo: str, descripcion: str):
     st.success("✅ Idea guardada correctamente")
     return True
 
-
 def agregar_nota(idea_id, texto: str):
     if texto.strip() == "":
         st.error("La nota no puede estar vacía")
         return False
-
     nueva_actualizacion = {
         "text": texto.strip(),
         "timestamp": datetime.now(pytz.UTC),
@@ -75,16 +73,13 @@ def to_datetime_local(dt):
 
 def cronometro_desarrollo():
     st.subheader("⏳ Tiempo invertido en el desarrollo de la App")
-
     evento = dev_collection.find_one({"tipo": "dev_app", "en_curso": True})
-
     if evento:
         hora_inicio = to_datetime_local(evento["inicio"])
         segundos_transcurridos = int((datetime.now(colombia_tz) - hora_inicio).total_seconds())
         st.success(f"🟢 Desarrollo en curso desde las {hora_inicio.strftime('%H:%M:%S')}")
         cronometro = st.empty()
         stop_button = st.button("⏹️ Finalizar desarrollo", key="stop_dev")
-
         for i in range(segundos_transcurridos, segundos_transcurridos + 100000):
             if stop_button:
                 dev_collection.update_one(
@@ -93,7 +88,6 @@ def cronometro_desarrollo():
                 )
                 st.success("✅ Registro finalizado.")
                 st.rerun()
-
             duracion = str(timedelta(seconds=i))
             cronometro.markdown(f"### ⏱️ Duración: {duracion}")
             time.sleep(1)
@@ -107,7 +101,7 @@ def cronometro_desarrollo():
             st.rerun()
 
 # ==============================
-# UI PRINCIPAL con contador antes de expanders en Guardadas y checkbox corregido
+# UI PRINCIPAL
 # ==============================
 tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
     ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"]
@@ -116,36 +110,30 @@ tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
 with tab_guardadas:
     ideas = list(collection.find().sort("timestamp", -1))  # Obtener ideas primero
     st.subheader(f"📌 {len(ideas)} guardadas")              # Mostrar contador antes
-
     for idea in ideas:
         fecha_local = idea["timestamp"].astimezone(colombia_tz)
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
-
             if "updates" in idea and len(idea["updates"]) > 0:
                 st.markdown("**Trazabilidad / Notas adicionales:**")
-
                 for idx, note in enumerate(idea["updates"]):
                     fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
-
                     if not note.get("done", False):
-                        col_text, col_chk = st.columns([0.9, 0.1])
+                        col_text, col_btn = st.columns([0.85, 0.15])
                         with col_text:
                             st.markdown(f"➡️ {note['text']}  ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}")
-                        with col_chk:
-                            checked = st.checkbox("", key=f"chk_{idea['_id']}_{idx}", value=False)
-                        if checked:
-                            done_at = datetime.now(pytz.UTC)
-                            collection.update_one(
-                                {"_id": idea["_id"]},
-                                {"$set": {
-                                    f"updates.{idx}.done": True,
-                                    f"updates.{idx}.done_at": done_at
-                                }}
-                            )
-                            st.success("✅ Nota marcada como acción ejecutada")
-                            st.rerun()
-
+                        with col_btn:
+                            if st.button("Listo!!!", key=f"btn_listo_{idea['_id']}_{idx}"):
+                                done_at = datetime.now(pytz.UTC)
+                                collection.update_one(
+                                    {"_id": idea["_id"]},
+                                    {"$set": {
+                                        f"updates.{idx}.done": True,
+                                        f"updates.{idx}.done_at": done_at
+                                    }}
+                                )
+                                st.success("✅ Nota marcada como acción ejecutada")
+                                st.rerun()
                     else:
                         done_at = note.get("done_at")
                         done_local = done_at.astimezone(colombia_tz) if done_at else None
@@ -155,7 +143,6 @@ with tab_guardadas:
                             horas, resto = divmod(delta.total_seconds(), 3600)
                             minutos, segundos = divmod(resto, 60)
                             duracion = f"⏱️ {int(horas)}h {int(minutos)}m {int(segundos)}s"
-
                         st.markdown(
                             f"✔️ ~~{note['text']}~~  \n "
                             f"⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')} → "
@@ -163,7 +150,6 @@ with tab_guardadas:
                             f"{duracion}"
                         )
                 st.divider()
-
             with st.form(f"form_update_{idea['_id']}", clear_on_submit=True):
                 nueva_nota = st.text_area("Agregar nota", key=f"nota_{idea['_id']}")
                 enviar_nota = st.form_submit_button("Guardar nota")
@@ -181,4 +167,27 @@ with tab_ideas:
             st.rerun()
 
 with tab_desarrollo:
-    cronometro_desarrollo()
+    # Traer y mostrar data de dev_collection en tabla ordenada descendente con índice comenzando en 1
+    eventos_cursor = dev_collection.find().sort("inicio", -1)
+    eventos = list(eventos_cursor)
+
+    if len(eventos) == 0:
+        st.info("No hay datos para mostrar.")
+    else:
+        # Preparar dataframe
+        data = []
+        for i, ev in enumerate(eventos, start=1):
+            inicio_local = ev["inicio"].astimezone(colombia_tz) if "inicio" in ev else None
+            fin_local = ev.get("fin", None)
+            if fin_local is not None:
+                fin_local = fin_local.astimezone(colombia_tz)
+
+            data.append({
+                "#": i,
+                "Inicio": inicio_local.strftime("%Y-%m-%d %H:%M:%S") if inicio_local else "",
+                "Fin": fin_local.strftime("%Y-%m-%d %H:%M:%S") if fin_local else "",
+                "En curso": "Sí" if ev.get("en_curso", False) else "No"
+            })
+
+        df = pd.DataFrame(data)
+        st.dataframe(df, use_container_width=True)

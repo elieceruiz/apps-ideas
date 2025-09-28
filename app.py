@@ -2,7 +2,7 @@
 import streamlit as st
 import pytz
 from pymongo import MongoClient
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # ==============================
 # CONFIG
@@ -37,8 +37,8 @@ def guardar_idea(titulo: str, descripcion: str):
         "title": titulo.strip(),
         "description": descripcion.strip(),
         "timestamp": datetime.now(pytz.UTC),  # siempre guardar en UTC
-        "updates": [],   # historial de trazabilidad
-        "sessions": []   # historial de sesiones
+        "updates": [],  # historial de trazabilidad
+        "sessions": []  # historial de cronómetros
     }
     collection.insert_one(nueva_idea)
     st.success("✅ Idea guardada correctamente")
@@ -63,27 +63,8 @@ def agregar_nota(idea_id, texto: str):
     return True
 
 
-def iniciar_sesion(idea_id):
-    """Inicia una nueva sesión de cronómetro para la idea."""
-    nueva_sesion = {"inicio": datetime.now(pytz.UTC), "fin": None}
-    collection.update_one(
-        {"_id": idea_id},
-        {"$push": {"sessions": nueva_sesion}}
-    )
-    st.rerun()
-
-
-def detener_sesion(idea_id):
-    """Detiene la sesión activa de cronómetro de la idea."""
-    collection.update_one(
-        {"_id": idea_id, "sessions.fin": None},
-        {"$set": {"sessions.$.fin": datetime.now(pytz.UTC)}}
-    )
-    st.rerun()
-
-
 def listar_ideas():
-    """Muestra las ideas guardadas con su trazabilidad, cronómetro y notas."""
+    """Muestra las ideas guardadas con trazabilidad, notas y sesiones de cronómetro."""
     st.subheader("📌 Guardadas")
     ideas = collection.find().sort("timestamp", -1)
 
@@ -92,40 +73,79 @@ def listar_ideas():
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
 
-            # ========== CRONÓMETRO ==========
+            # ======================
+            # Sección: Cronómetro
+            # ======================
             sesiones = idea.get("sessions", [])
-            sesion_activa = None
-            for sesion in sesiones:
-                if sesion["fin"] is None:
-                    sesion_activa = sesion
-                    break
+            sesion_activa = next((s for s in sesiones if s.get("fin") is None), None)
 
+            # Mostrar cronómetro si hay sesión activa
             if sesion_activa:
-                inicio_local = sesion_activa["inicio"].astimezone(colombia_tz)
-                segundos = int((datetime.now(pytz.UTC) - sesion_activa["inicio"]).total_seconds())
-                st.markdown(f"### ⏱ En curso: {str(timedelta(seconds=segundos))}")
-                st.caption(f"Desde {inicio_local.strftime('%Y-%m-%d %H:%M:%S')}")
-                if st.button("⏹️ Detener", key=f"stop_{idea['_id']}"):
-                    detener_sesion(idea["_id"])
+                inicio = sesion_activa["inicio"]
+                if isinstance(inicio, str):
+                    from dateutil import parser
+                    inicio = parser.parse(inicio)
+
+                segundos = int((datetime.now(pytz.UTC) - inicio).total_seconds())
+                horas, resto = divmod(segundos, 3600)
+                minutos, segundos = divmod(resto, 60)
+                st.markdown(
+                    f"⏱ **Cronómetro en curso:** {horas:02}:{minutos:02}:{segundos:02}"
+                )
+
+                if st.button("⏹ Detener", key=f"stop_{idea['_id']}"):
+                    collection.update_one(
+                        {"_id": idea["_id"], "sessions.inicio": sesion_activa["inicio"]},
+                        {"$set": {"sessions.$.fin": datetime.now(pytz.UTC)}}
+                    )
+                    st.rerun()
             else:
-                if st.button("🟢 Iniciar cronómetro", key=f"start_{idea['_id']}"):
-                    iniciar_sesion(idea["_id"])
+                if st.button("▶️ Iniciar cronómetro", key=f"start_{idea['_id']}"):
+                    nueva_sesion = {
+                        "inicio": datetime.now(pytz.UTC),
+                        "fin": None
+                    }
+                    collection.update_one(
+                        {"_id": idea["_id"]},
+                        {"$push": {"sessions": nueva_sesion}}
+                    )
+                    st.rerun()
 
-            # Historial de sesiones cerradas
-            sesiones_cerradas = [s for s in sesiones if s["fin"] is not None]
-            if sesiones_cerradas:
-                st.markdown("**Historial de sesiones:**")
-                for s in reversed(sesiones_cerradas):
-                    ini = s["inicio"].astimezone(colombia_tz)
-                    fin = s["fin"].astimezone(colombia_tz)
-                    duracion = str(fin - ini).split(".")[0]
-                    st.markdown(f"✅ {duracion}  ({ini.strftime('%Y-%m-%d %H:%M')} → {fin.strftime('%H:%M')})")
+            # Historial de sesiones previas
+            if sesiones:
+                st.markdown("**📊 Sesiones registradas:**")
+                for i, sesion in enumerate(sesiones, 1):
+                    inicio = sesion["inicio"]
+                    fin = sesion.get("fin")
 
-            st.divider()
+                    if isinstance(inicio, str):
+                        from dateutil import parser
+                        inicio = parser.parse(inicio)
+                    inicio_local = inicio.astimezone(colombia_tz)
 
-            # ========== TRAZABILIDAD ==========
+                    if fin:
+                        if isinstance(fin, str):
+                            from dateutil import parser
+                            fin = parser.parse(fin)
+                        fin_local = fin.astimezone(colombia_tz)
+                        duracion = fin - inicio
+                        mins, secs = divmod(int(duracion.total_seconds()), 60)
+                        st.write(
+                            f"#{i} — {inicio_local.strftime('%Y-%m-%d %H:%M')} → {fin_local.strftime('%H:%M')} "
+                            f"({mins}m {secs}s)"
+                        )
+                    else:
+                        st.write(
+                            f"#{i} — {inicio_local.strftime('%Y-%m-%d %H:%M')} → ⏳ En curso"
+                        )
+
+                st.divider()
+
+            # ======================
+            # Sección: Notas
+            # ======================
             if "updates" in idea and len(idea["updates"]) > 0:
-                st.markdown("**Trazabilidad / Notas adicionales:**")
+                st.markdown("**📝 Trazabilidad / Notas adicionales:**")
                 for note in idea["updates"]:
                     fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
                     st.markdown(
@@ -141,7 +161,6 @@ def listar_ideas():
                 if enviar_nota:
                     agregar_nota(idea["_id"], nueva_nota)
                     st.rerun()
-
 
 # ==============================
 # UI PRINCIPAL

@@ -107,7 +107,7 @@ def cronometro_desarrollo():
             st.rerun()
 
 # ==============================
-# UI PRINCIPAL con contador antes de expanders en Guardadas
+# UI PRINCIPAL con contador antes de expanders en Guardadas y checkbox corregido
 # ==============================
 tab_guardadas, tab_ideas, tab_desarrollo = st.tabs(
     ["📂 Guardadas", "💡 Ideas", "💻 Desarrollo"]
@@ -117,7 +117,6 @@ with tab_guardadas:
     ideas = list(collection.find().sort("timestamp", -1))  # Obtener ideas primero
     st.subheader(f"📌 {len(ideas)} guardadas")              # Mostrar contador antes
 
-    # Mostrar ideas con expanders
     for idea in ideas:
         fecha_local = idea["timestamp"].astimezone(colombia_tz)
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
@@ -130,13 +129,11 @@ with tab_guardadas:
                     fecha_nota_local = note["timestamp"].astimezone(colombia_tz)
 
                     if not note.get("done", False):
-                        col1, col2 = st.columns([0.1, 0.9])
-                        with col1:
+                        col_text, col_chk = st.columns([0.9, 0.1])
+                        with col_text:
+                            st.markdown(f"➡️ {note['text']}  ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}")
+                        with col_chk:
                             checked = st.checkbox("", key=f"chk_{idea['_id']}_{idx}", value=False)
-                        with col2:
-                            st.markdown(
-                                f"➡️ {note['text']}  \n ⏰ {fecha_nota_local.strftime('%Y-%m-%d %H:%M')}"
-                            )
                         if checked:
                             done_at = datetime.now(pytz.UTC)
                             collection.update_one(

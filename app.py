@@ -99,21 +99,32 @@ def listar_ideas():
         with st.expander(f"💡 {idea['title']}  —  {fecha_local.strftime('%Y-%m-%d %H:%M')}"):
             st.write(idea["description"])
 
-            # Sesiones (debug incl.)
+            # Sesiones (debug)
             if "sessions" in idea and idea["sessions"]:
                 st.markdown("**⏱ Sesiones registradas:**")
-                for sesion in idea["sessions"]:
+
+                for i, sesion in enumerate(idea["sessions"], start=1):
+                    st.write(f"🔍 Sesión {i} cruda desde MongoDB:")
+                    st.json(sesion)  # mostrar el objeto tal cual
+
                     inicio = parse_datetime(sesion.get("inicio"))
                     fin = parse_datetime(sesion.get("fin"))
+
+                    st.write(f"👉 inicio parsed: {inicio} ({type(inicio)})")
+                    st.write(f"👉 fin parsed: {fin} ({type(fin)})")
+
                     if inicio:
                         if fin:
                             duracion = int((fin - inicio).total_seconds())
-                            st.write(f"✔️ {duracion // 60} min {duracion % 60} seg")
+                            st.success(f"✔️ Finalizada: {duracion // 60} min {duracion % 60} seg")
                         else:
-                            segundos = int((datetime.now(pytz.UTC) - inicio).total_seconds())
-                            st.write(f"⏳ Activa: {segundos // 60} min {segundos % 60} seg")
+                            try:
+                                segundos = int((datetime.now(pytz.UTC) - inicio).total_seconds())
+                                st.info(f"⏳ Activa: {segundos // 60} min {segundos % 60} seg")
+                            except Exception as e:
+                                st.error(f"❌ Error restando datetime: {e}")
                     else:
-                        st.write("⚠️ Sesión con inicio inválido:", sesion)
+                        st.warning("⚠️ Sesión sin inicio válido")
 
             # Historial de notas
             if "updates" in idea and idea["updates"]:
